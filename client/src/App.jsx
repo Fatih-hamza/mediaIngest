@@ -53,9 +53,8 @@ function HeroCard({ active, current }) {
             <div className="h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
               <motion.div
                 className="h-full bg-gradient-to-r from-blue-600 to-blue-500"
-                initial={{ width: 0 }}
                 animate={{ width: `${current.progress}%` }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
+                transition={{ duration: 0.1, ease: "linear" }}
               />
             </div>
           </div>
@@ -275,7 +274,7 @@ export default function App() {
     }
 
     poll()
-    const interval = setInterval(poll, 1000)
+    const interval = setInterval(poll, 500) // Poll every 500ms for faster updates
     
     return () => { 
       mounted = false
