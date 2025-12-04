@@ -5,12 +5,15 @@ module.exports = {
       colors: {
         slate: {
           850: '#1a202e',
-          950: '#0d1117'
+          950: '#0a0f1a'
         }
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace']
+        mono: ['JetBrains Mono', 'Courier New', 'monospace']
+      },
+      backdropBlur: {
+        xs: '2px'
       }
     }
   },
