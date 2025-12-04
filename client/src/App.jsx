@@ -1,213 +1,231 @@
 import React, { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Zap, Activity, Check, Loader2 } from 'lucide-react'
-
-// Log Parser - Extracts transfer data from rsync output
-function parseLogData(logLines) {
-  const current = { filename: null, progress: 0, speed: null, timeRemaining: null }
-  const completed = []
-  
-  for (let i = 0; i < logLines.length; i++) {
-    const line = logLines[i].trim()
-    
-    // Match progress line: "1.80G 100% 65.71MB/s 0:00:26"
-    const progressMatch = line.match(/^([\d.]+[KMGT]?)\s+(\d+)%\s+([\d.]+[KMGT]?B\/s)\s+(\d+:\d+:\d+)/)
-    
-    if (progressMatch) {
-      const progress = parseInt(progressMatch[2])
-      const speed = progressMatch[3]
-      const timeRemaining = progressMatch[4]
-      
-      // Look backwards for the filename (previous non-empty line)
-      let filename = null
-      for (let j = i - 1; j >= 0; j--) {
-        const prevLine = logLines[j].trim()
-        if (prevLine && !prevLine.match(/^([\d.]+[KMGT]?)\s+(\d+)%/) && !prevLine.includes('Syncing')) {
-          filename = prevLine
-          break
-        }
-      }
-      
-      if (progress === 100 && filename) {
-        // Completed file
-        if (!completed.find(f => f.filename === filename)) {
-          completed.push({ filename, speed, timestamp: Date.now() })
-        }
-      } else if (progress < 100 && filename) {
-        // Currently transferring
-        current.filename = filename
-        current.progress = progress
-        current.speed = speed
-        current.timeRemaining = timeRemaining
-      }
-    }
-  }
-  
-  return { current, completed: completed.slice(-5) }
-}
+import { motion } from 'framer-motion'
+import { HardDrive, Activity, CheckCircle, Zap, Clock, Database } from 'lucide-react'
 
 function StatusBadge({ active }) {
   return (
-    <div className="flex items-center space-x-3">
+    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-800 border border-slate-700">
       <motion.div 
-        className={`w-3 h-3 rounded-full ${active ? 'bg-orange-400' : 'bg-emerald-400'}`}
+        className={`w-2 h-2 rounded-full ${active ? 'bg-emerald-500' : 'bg-slate-500'}`}
         animate={active ? { 
-          scale: [1, 1.3, 1],
-          opacity: [1, 0.7, 1]
+          scale: [1, 1.2, 1],
+          opacity: [1, 0.8, 1]
         } : {}}
-        transition={{ duration: 1.5, repeat: Infinity }}
+        transition={{ duration: 2, repeat: Infinity }}
       />
-      <div className="text-sm font-semibold">
-        {active ? (
-          <span className="text-orange-300">Ingesting Data...</span>
-        ) : (
-          <span className="text-emerald-300">System Ready</span>
-        )}
+      <span className="text-xs font-medium uppercase tracking-wide text-slate-300">
+        {active ? 'Active' : 'Idle'}
+      </span>
+    </div>
+  )
+}
+
+function HeroCard({ active, current }) {
+  const hasTransfer = active && current.filename
+  
+  return (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Active Transfer
+        </h2>
+        <Activity className={`w-4 h-4 ${active ? 'text-blue-400' : 'text-slate-600'}`} />
+      </div>
+
+      {hasTransfer ? (
+        <div>
+          {/* Filename */}
+          <div className="mb-6">
+            <h3 className="text-2xl font-bold text-white mb-1 truncate">
+              {current.filename}
+            </h3>
+            <p className="text-sm text-slate-500">Media file ingest in progress</p>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs uppercase tracking-wide text-slate-400">Progress</span>
+              <span className="text-sm font-bold text-blue-400">{current.progress}%</span>
+            </div>
+            <div className="h-2 bg-slate-900 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-blue-500"
+                initial={{ width: 0 }}
+                animate={{ width: `${current.progress}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-slate-900 rounded-md p-4 border border-slate-800">
+              <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Speed</div>
+              <div className="text-xl font-bold text-white">{current.speed || '--'}</div>
+            </div>
+            <div className="bg-slate-900 rounded-md p-4 border border-slate-800">
+              <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Size</div>
+              <div className="text-xl font-bold text-white">
+                {current.size ? `${current.size}` : '--'}
+              </div>
+            </div>
+            <div className="bg-slate-900 rounded-md p-4 border border-slate-800">
+              <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">ETA</div>
+              <div className="text-xl font-bold text-white">{current.timeRemaining || '--'}</div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <HardDrive className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-400 mb-1">Waiting for Drive...</h3>
+          <p className="text-sm text-slate-600">Connect a USB device to begin transfer</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DriveInfoCard() {
+  return (
+    <div className="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Device Info
+        </h2>
+        <Database className="w-4 h-4 text-slate-600" />
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Label</div>
+          <div className="text-sm font-medium text-white">USB Storage Device</div>
+        </div>
+        
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Mount Point</div>
+          <div className="text-sm font-mono text-slate-300">/media/usb-ingest</div>
+        </div>
+        
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">File System</div>
+          <div className="text-sm font-medium text-slate-300">NTFS (ntfs3 driver)</div>
+        </div>
+
+        <div className="pt-4 border-t border-slate-700">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-500" />
+            <span className="text-xs text-slate-400">Device Ready</span>
+          </div>
+        </div>
       </div>
     </div>
   )
 }
 
-function HeroCard({ current, active }) {
-  const hasTransfer = current.filename && active
-  
+function HistoryCard({ completed }) {
   return (
-    <motion.div 
-      className="relative overflow-hidden rounded-3xl p-8 glass-card border border-slate-700/50"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      {/* Gradient glow effect */}
-      <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 via-purple-500/10 to-pink-500/10 blur-xl" />
-      
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 backdrop-blur">
-              <Activity className="w-6 h-6 text-cyan-400" />
-            </div>
-            <div>
-              <h2 className="text-sm text-slate-400 font-medium">Current Transfer</h2>
-              <p className="text-xs text-slate-500">Live Progress Monitor</p>
-            </div>
-          </div>
-          <StatusBadge active={active} />
-        </div>
-
-        <AnimatePresence mode="wait">
-          {hasTransfer ? (
-            <motion.div
-              key="transfer"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              {/* Filename */}
-              <div className="mb-4">
-                <div className="text-2xl font-bold text-slate-100 truncate">
-                  {current.filename}
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="mb-6">
-                <div className="flex justify-between text-xs text-slate-400 mb-2">
-                  <span>Progress</span>
-                  <span className="text-cyan-400 font-semibold">{current.progress}%</span>
-                </div>
-                <div className="h-4 bg-slate-800/50 rounded-full overflow-hidden border border-slate-700/50">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500 shadow-[0_0_20px_rgba(6,182,212,0.5)]"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${current.progress}%` }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                  />
-                </div>
-              </div>
-
-              {/* Speed & Time */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
-                  <div className="text-xs text-slate-400 mb-1">Transfer Speed</div>
-                  <div className="text-2xl font-bold text-cyan-400">{current.speed}</div>
-                </div>
-                <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/30">
-                  <div className="text-xs text-slate-400 mb-1">Time Remaining</div>
-                  <div className="text-2xl font-bold text-purple-400">{current.timeRemaining}</div>
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="idle"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="text-center py-12"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 flex items-center justify-center">
-                <Zap className="w-8 h-8 text-emerald-400" />
-              </div>
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">No Active Transfers</h3>
-              <p className="text-sm text-slate-500">Waiting for media ingest to begin...</p>
-            </motion.div>
-          )}
-        </AnimatePresence>
+    <div className="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Recent Transfers
+        </h2>
+        <span className="text-xs text-slate-600">{completed.length} completed</span>
       </div>
-    </motion.div>
+
+      {completed.length === 0 ? (
+        <div className="text-center py-8 text-slate-600 text-sm">
+          No completed transfers yet
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {completed.map((file, idx) => (
+            <motion.div
+              key={file.filename + idx}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              className="flex items-center gap-3 p-3 bg-slate-900 rounded-md border border-slate-800 hover:border-slate-700 transition-colors"
+            >
+              <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-white truncate">{file.filename}</div>
+                <div className="text-xs text-slate-500">
+                  {file.size && <span className="mr-3">{file.size}</span>}
+                  <span>Avg. {file.speed}</span>
+                </div>
+              </div>
+              <Clock className="w-3 h-3 text-slate-600" />
+            </motion.div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
-function HistoryList({ completed }) {
-  return (
-    <motion.div
-      className="rounded-2xl p-6 glass-card border border-slate-700/50"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1 }}
-    >
-      <div className="flex items-center gap-2 mb-4">
-        <Check className="w-5 h-5 text-emerald-400" />
-        <h3 className="text-lg font-semibold text-slate-200">Recently Completed</h3>
-        <span className="text-xs text-slate-500 ml-auto">{completed.length} files</span>
-      </div>
-
-      <div className="space-y-2">
-        <AnimatePresence>
-          {completed.length === 0 ? (
-            <div className="text-center py-8 text-slate-500 text-sm">
-              No completed transfers yet
-            </div>
-          ) : (
-            completed.map((file, idx) => (
-              <motion.div
-                key={file.filename + idx}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ delay: idx * 0.05 }}
-                className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 border border-slate-700/30 hover:border-emerald-500/30 transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm text-slate-200 truncate">{file.filename}</div>
-                  <div className="text-xs text-slate-500">Avg. {file.speed}</div>
-                </div>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
-  )
+// Log Parser - Extracts transfer data from rsync output
+function parseLogData(logLines) {
+  const current = { filename: null, progress: 0, speed: null, timeRemaining: null, size: null }
+  const completed = []
+  let currentFilename = null
+  
+  for (let i = 0; i < logLines.length; i++) {
+    const line = logLines[i].trim()
+    
+    const progressMatch = line.match(/([\d.]+[KMGT]?)\s+(\d+)%\s+([\d.]+[KMGT]?B\/s)\s+(\d+:\d+:\d+)/)
+    
+    if (progressMatch) {
+      const size = progressMatch[1]
+      const progress = parseInt(progressMatch[2])
+      const speed = progressMatch[3]
+      const timeRemaining = progressMatch[4]
+      
+      if (!currentFilename) {
+        for (let j = i - 1; j >= 0; j--) {
+          const prevLine = logLines[j].trim()
+          if (prevLine && (
+            prevLine.match(/\.(mp4|mkv|avi|mov|m4v|webm)$/i) ||
+            prevLine.match(/\.(srt|txt|jpg|png)$/i)
+          )) {
+            currentFilename = prevLine.replace(/^.*\//, '')
+            break
+          }
+        }
+      }
+      
+      if (progress === 100 && currentFilename && currentFilename.match(/\.(mp4|mkv|avi|mov|m4v|webm)$/i)) {
+        if (!completed.find(f => f.filename === currentFilename)) {
+          completed.push({ filename: currentFilename, speed, size, timestamp: Date.now() })
+        }
+        currentFilename = null
+      } else if (progress < 100 && currentFilename) {
+        current.filename = currentFilename
+        current.progress = progress
+        current.speed = speed
+        current.timeRemaining = timeRemaining
+        current.size = size
+      }
+    } else if (line.match(/\.(mp4|mkv|avi|mov|m4v|webm)$/i)) {
+      currentFilename = line.replace(/^.*\//, '')
+    } else if (line.includes('Ingest Complete') || line.includes('sent ') || line.includes('bytes/sec')) {
+      currentFilename = null
+      if (current.progress === 100) {
+        current.filename = null
+        current.progress = 0
+      }
+    }
+  }
+  
+  return { current, completed: completed.slice(-5).reverse() }
 }
 
 export default function App() {
   const [active, setActive] = useState(false)
-  const [current, setCurrent] = useState({ filename: null, progress: 0, speed: null, timeRemaining: null })
+  const [current, setCurrent] = useState({ filename: null, progress: 0, speed: null, timeRemaining: null, size: null })
   const [completed, setCompleted] = useState([])
+  const [uptime, setUptime] = useState('00:00:00')
 
   useEffect(() => {
     let mounted = true
@@ -240,45 +258,64 @@ export default function App() {
 
     poll()
     const interval = setInterval(poll, 500)
-    return () => { mounted = false; clearInterval(interval) }
+    
+    // Uptime counter
+    const startTime = Date.now()
+    const uptimeInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000)
+      const hours = Math.floor(elapsed / 3600).toString().padStart(2, '0')
+      const minutes = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0')
+      const seconds = (elapsed % 60).toString().padStart(2, '0')
+      setUptime(`${hours}:${minutes}:${seconds}`)
+    }, 1000)
+    
+    return () => { 
+      mounted = false
+      clearInterval(interval)
+      clearInterval(uptimeInterval)
+    }
   }, [])
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200 p-6">
-      {/* Background gradients */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl" />
-      </div>
-
-      <div className="max-w-5xl mx-auto relative z-10">
+    <div className="min-h-screen bg-slate-900 p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <motion.header 
-          className="mb-8"
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-extrabold bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                Universal Media Ingest
-              </h1>
-              <p className="text-sm text-slate-500 mt-1">High-Performance Transfer Monitor</p>
+        <header className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-slate-800 rounded-lg border border-slate-700 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-blue-400" />
             </div>
-            <div className="text-xs text-slate-600">
-              <Loader2 className="w-4 h-4 inline animate-spin mr-1" />
-              Auto-refresh: 500ms
+            <div>
+              <h1 className="text-xl font-bold text-white">Media Ingest Node</h1>
+              <p className="text-xs text-slate-500">USB Transfer Monitor</p>
             </div>
           </div>
-        </motion.header>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Uptime</div>
+              <div className="text-sm font-mono text-slate-300">{uptime}</div>
+            </div>
+            <StatusBadge active={active} />
+          </div>
+        </header>
 
-        {/* Hero Card */}
-        <div className="mb-6">
-          <HeroCard current={current} active={active} />
+        {/* Main Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Hero Card - spans 2 columns */}
+          <div className="lg:col-span-2">
+            <HeroCard active={active} current={current} />
+          </div>
+
+          {/* Drive Info Card */}
+          <div>
+            <DriveInfoCard />
+          </div>
+
+          {/* History Card - full width */}
+          <div className="lg:col-span-3">
+            <HistoryCard completed={completed} />
+          </div>
         </div>
-
-        {/* History */}
-        <HistoryList completed={completed} />
       </div>
     </div>
   )
