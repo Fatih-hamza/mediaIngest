@@ -11,22 +11,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.get('/api/logs', (req, res) => {
+app.get('/api/status', (req, res) => {
   fs.readFile(LOG_PATH, 'utf8', (err, data) => {
     if (err) {
       return res.json({ ok: false, logs: `Could not read ${LOG_PATH}: ${err.message}` });
     }
-    const lines = data.split(/\r?\n/);
-    const tail = lines.slice(-200).join('\n');
+    const lines = data.split(/\r?\n/).filter(line => line.trim());
+    const tail = lines.slice(-50);
     res.json({ ok: true, logs: tail });
   });
 });
 
-app.get('/api/status', (req, res) => {
+app.get('/api/active', (req, res) => {
   // Check for running rsync processes using pgrep
   exec('pgrep -x rsync', (err, stdout) => {
     const running = !!stdout && stdout.toString().trim().length > 0;
-    res.json({ ok: true, syncing: running });
+    res.json({ ok: true, active: running });
   });
 });
 
