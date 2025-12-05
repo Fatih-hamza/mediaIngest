@@ -290,24 +290,30 @@ fi
 
 echo "$(date): USB Device Detected: $DEVICE (kernel: $KERNEL_DEVICE)" >> /var/log/usb-trigger.log
 
-# Wait for device to be ready
-sleep 2
+# Wait for device to be fully ready
+sleep 3
 
 # Create mount point if needed
 mkdir -p "$HOST_MOUNT"
 
+# Check if device exists and is readable
+if [ ! -b "$DEVICE" ]; then
+    echo "$(date): ERROR - Device $DEVICE does not exist or is not a block device" >> /var/log/usb-trigger.log
+    exit 1
+fi
+
 # Mount on Proxmox host (try ntfs3 first, then fallback)
-mount -t ntfs3 -o noatime "$DEVICE" "$HOST_MOUNT" 2>/dev/null
+mount -t ntfs3 -o noatime "$DEVICE" "$HOST_MOUNT" 2>> /var/log/usb-trigger.log
 
 # Fallback to standard mount if ntfs3 fails
 if [ $? -ne 0 ]; then
     echo "$(date): ntfs3 failed, trying standard mount..." >> /var/log/usb-trigger.log
-    mount "$DEVICE" "$HOST_MOUNT" 2>/dev/null
+    mount "$DEVICE" "$HOST_MOUNT" 2>> /var/log/usb-trigger.log
 fi
 
 # Verify Mount
 if ! mount | grep -q "$HOST_MOUNT"; then
-    echo "$(date): ERROR - Failed to mount $DEVICE" >> /var/log/usb-trigger.log
+    echo "$(date): ERROR - Failed to mount $DEVICE (check filesystem type and errors above)" >> /var/log/usb-trigger.log
     exit 1
 fi
 
