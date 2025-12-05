@@ -106,14 +106,17 @@ function parseCurrentTransfer() {
     return { filename: null, progress: 0, speed: null, timeRemaining: null, size: null };
   }
   
-  // Check if sync is active
+  // Check if sync is active by looking backwards from the end
+  // If we see SYNC_END before SYNC_START, sync is complete
   let inActiveSync = false;
-  for (const line of progressLines) {
-    if (line.startsWith('SYNC_START:')) {
-      inActiveSync = true;
-    }
-    if (line.startsWith('SYNC_END:')) {
+  for (let i = progressLines.length - 1; i >= 0; i--) {
+    if (progressLines[i].startsWith('SYNC_END:')) {
       inActiveSync = false;
+      break;
+    }
+    if (progressLines[i].startsWith('SYNC_START:')) {
+      inActiveSync = true;
+      break;
     }
   }
   
