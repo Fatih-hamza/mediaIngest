@@ -507,23 +507,43 @@ fi
 
 echo "Target Found: $FOUND_SRC" >> "$LOG"
 
-# Check if destination NAS already has a Media folder (case-insensitive)
-DEST_MEDIA=$(find "$DEST_ROOT" -maxdepth 1 -type d -iname "Media" 2>/dev/null | head -n 1)
+# Check if NAS already has Anime, Movies, and Series folders at root level
+# If all three exist, use NAS root directly (no Media parent folder needed)
+HAS_ANIME=$(find "$DEST_ROOT" -maxdepth 1 -type d -iname "Anime" 2>/dev/null | head -n 1)
+HAS_MOVIES=$(find "$DEST_ROOT" -maxdepth 1 -type d -iname "Movies" 2>/dev/null | head -n 1)
+HAS_SERIES=$(find "$DEST_ROOT" -maxdepth 1 -type d -iname "Series" 2>/dev/null | head -n 1)
 
-if [ -n "$DEST_MEDIA" ]; then
-    echo "Using existing Media folder on NAS: $DEST_MEDIA" >> "$LOG"
-    DEST_BASE="$DEST_MEDIA"
+if [ -n "$HAS_ANIME" ] && [ -n "$HAS_MOVIES" ] && [ -n "$HAS_SERIES" ]; then
+    echo "Detected existing Anime, Movies, Series folders at NAS root. Using direct structure." >> "$LOG"
+    DEST_BASE="$DEST_ROOT"
+    USE_DIRECT_STRUCTURE=true
 else
-    echo "Creating new Media folder on NAS: $DEST_ROOT/Media" >> "$LOG"
-    mkdir -p "$DEST_ROOT/Media"
-    chmod 777 "$DEST_ROOT/Media"
-    DEST_BASE="$DEST_ROOT/Media"
+    # Check if destination NAS has a Media folder (case-insensitive)
+    DEST_MEDIA=$(find "$DEST_ROOT" -maxdepth 1 -type d -iname "Media" 2>/dev/null | head -n 1)
+    
+    if [ -n "$DEST_MEDIA" ]; then
+        echo "Using existing Media folder on NAS: $DEST_MEDIA" >> "$LOG"
+        DEST_BASE="$DEST_MEDIA"
+    else
+        echo "Creating new Media folder on NAS: $DEST_ROOT/Media" >> "$LOG"
+        mkdir -p "$DEST_ROOT/Media"
+        chmod 777 "$DEST_ROOT/Media"
+        DEST_BASE="$DEST_ROOT/Media"
+    fi
+    USE_DIRECT_STRUCTURE=false
 fi
 
 sync_folder() {
     FOLDER_NAME=$1
     SRC_SUB=$(find "$FOUND_SRC" -maxdepth 1 -type d -iname "$FOLDER_NAME" 2>/dev/null | head -n 1)
-    DST_PATH="$DEST_BASE/$FOLDER_NAME"
+    
+    # Use case-insensitive search for destination folder
+    if [ "$USE_DIRECT_STRUCTURE" = true ]; then
+        DST_FOLDER=$(find "$DEST_BASE" -maxdepth 1 -type d -iname "$FOLDER_NAME" 2>/dev/null | head -n 1)
+        DST_PATH="$DST_FOLDER"
+    else
+        DST_PATH="$DEST_BASE/$FOLDER_NAME"
+    fi
 
     if [ -n "$SRC_SUB" ]; then
         # Check if folder has any content
