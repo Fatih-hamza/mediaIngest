@@ -491,6 +491,12 @@ sync_folder() {
     DST_PATH="$DEST_ROOT/$FOLDER_NAME"
 
     if [ -n "$SRC_SUB" ]; then
+        # Check if folder has any content
+        if [ -z "$(ls -A "$SRC_SUB" 2>/dev/null)" ]; then
+            echo "Skipped: $FOLDER_NAME is empty." >> "$LOG"
+            return 0
+        fi
+        
         echo "Syncing $SRC_SUB -> $DST_PATH" >> "$LOG"
         echo "SYNC_START:$FOLDER_NAME" >> "$LOG"
 
