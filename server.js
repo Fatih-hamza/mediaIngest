@@ -5,7 +5,7 @@ const path = require('path');
 const { exec } = require('child_process');
 
 const LOG_PATH = '/var/log/media-ingest.log';
-const PROGRESS_LOG_PATH = '/var/log/media-ingest-progress.log';
+const PROGRESS_LOG_PATH = '/var/log/media-ingest.log'; // Use main log since progress log isn't being populated
 const HISTORY_PATH = path.join(__dirname, 'history.json');
 const PORT = process.env.PORT || 3000;
 
