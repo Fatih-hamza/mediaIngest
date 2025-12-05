@@ -1,16 +1,14 @@
 #!/bin/bash
 
 ################################################################################
-# Media Ingest System - Zero-Touch Installer
+# Universal USB Media Ingest Installer for Proxmox VE
 # 
-# Completely automated deployment with NO user prompts
-# Just run and walk away!
-#
 # Features:
-# - Auto-detects next available container ID
-# - Auto-selects storage pool
-# - Auto-downloads templates if needed
-# - Configures everything silently
+# - Intelligent destination selection (scans /mnt/pve/* and /mnt/*)
+# - Interactive storage menu
+# - Auto-provisions Media folder with proper permissions
+# - Complete automation: Host + LXC creation + Dashboard
+# - Single destination choice, then fully automated
 ################################################################################
 
 set -e
@@ -24,32 +22,30 @@ GN='\033[1;92m'  # Green
 CL='\033[m'      # Clear
 RD='\033[01;31m' # Red
 YW='\033[1;33m'  # Yellow
-BFR="\\r\\033[K" # Back to First column and Clear Line
+MG='\033[35m'    # Magenta
+CY='\033[96m'    # Cyan
 HOLD="-"
 CM="${GN}✓${CL}"
 CROSS="${RD}✗${CL}"
+BFR="\\r\\033[K"
 
 ################################################################################
 # Helper Functions
 ################################################################################
 msg_info() {
-    local msg="$1"
-    echo -ne " ${HOLD} ${YW}${msg}..."
+    echo -ne " ${HOLD} ${YW}$1...${CL} "
 }
 
 msg_ok() {
-    local msg="$1"
-    echo -e "${BFR} ${CM} ${GN}${msg}${CL}"
+    echo -e "${BFR} ${CM} ${GN}$1${CL}"
 }
 
 msg_error() {
-    local msg="$1"
-    echo -e "${BFR} ${CROSS} ${RD}${msg}${CL}"
+    echo -e "${BFR} ${CROSS} ${RD}$1${CL}"
 }
 
 msg_warn() {
-    local msg="$1"
-    echo -e " ${YW}⚠${CL} ${msg}"
+    echo -e " ${YW}⚠${CL} ${YW}$1${CL}"
 }
 
 header_info() {
@@ -62,24 +58,29 @@ header_info() {
 /_/  /_/\___/\__,_/_/\__,_/  /___/_/ /_/\__, /\___/____/\__/   /____/\__, /____/\__/\___/_/ /_/ /_/ 
                                        /____/                        /____/                          
 
-                          Universal USB Media Ingest System
-                          Automated Installer v2.0
-                          
+                    Universal USB Media Ingest System
+                    Intelligent Installer v3.0
+                    
+
 EOF
 }
 
 ################################################################################
-# Configuration Variables (Hardcoded - No User Input)
+# Configuration Variables
 ################################################################################
 CT_NAME="media-ingest"
 CT_CORES=2
 CT_MEMORY=2048
 CT_SWAP=512
 CT_DISK=8
-CT_PASSWORD="mediaingest123"  # Change this if needed
-NAS_HOST_PATH="/mnt/pve/media-nas"
+CT_PASSWORD="mediaingest123"
+USB_MOUNT="/mnt/usb-pass"
+DEST_HOST_PATH=""      # Will be selected by user
+DEST_LXC_PATH="/media/destination"
 CONTAINER_EXISTS=false
-TEMPLATE=""  # Will be auto-detected
+CTID=""
+STORAGE=""
+TEMPLATE=""
 
 ################################################################################
 # Validation Functions
@@ -99,6 +100,82 @@ check_proxmox() {
         exit 1
     fi
     msg_ok "Proxmox VE detected"
+}
+
+################################################################################
+# Destination Selection
+################################################################################
+scan_destinations() {
+    echo -e "\n${BL}═══════════════════════════════════════════════════════════════${CL}"
+    echo -e "${BL}              Scanning for Storage Destinations...              ${CL}"
+    echo -e "${BL}═══════════════════════════════════════════════════════════════${CL}\n"
+    
+    # Find all mounted storage locations
+    local destinations=()
+    
+    # Scan /mnt/pve/*
+    if [ -d /mnt/pve ]; then
+        while IFS= read -r dir; do
+            if mountpoint -q "$dir" 2>/dev/null || [ -d "$dir" ]; then
+                destinations+=("$dir")
+            fi
+        done < <(find /mnt/pve -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
+    fi
+    
+    # Scan /mnt/* (exclude /mnt/pve and USB mount)
+    while IFS= read -r dir; do
+        if [ "$dir" != "/mnt/pve" ] && [ "$dir" != "$USB_MOUNT" ]; then
+            if mountpoint -q "$dir" 2>/dev/null || [ -d "$dir" ]; then
+                destinations+=("$dir")
+            fi
+        fi
+    done < <(find /mnt -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
+    
+    if [ ${#destinations[@]} -eq 0 ]; then
+        msg_error "No storage destinations found in /mnt/pve or /mnt"
+        echo -e "\n${YW}Please ensure your NAS/storage is mounted first.${CL}\n"
+        exit 1
+    fi
+    
+    # Display menu
+    echo -e "${GN}Available Storage Destinations:${CL}\n"
+    for i in "${!destinations[@]}"; do
+        local path="${destinations[$i]}"
+        local size=$(df -h "$path" 2>/dev/null | awk 'NR==2 {print $2}' || echo "N/A")
+        local used=$(df -h "$path" 2>/dev/null | awk 'NR==2 {print $3}' || echo "N/A")
+        local avail=$(df -h "$path" 2>/dev/null | awk 'NR==2 {print $4}' || echo "N/A")
+        printf "${CY}%2d)${CL} %-40s ${MG}Size:${CL} %-8s ${YW}Used:${CL} %-8s ${GN}Avail:${CL} %s\n" \
+               "$((i+1))" "$path" "$size" "$used" "$avail"
+    done
+    
+    echo ""
+    while true; do
+        read -p "$(echo -e ${GN}Select destination [1-${#destinations[@]}]:${CL} )" choice
+        
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#destinations[@]}" ]; then
+            DEST_HOST_PATH="${destinations[$((choice-1))]}"
+            break
+        else
+            echo -e "${RD}Invalid choice. Please enter a number between 1 and ${#destinations[@]}${CL}"
+        fi
+    done
+    
+    msg_ok "Selected: $DEST_HOST_PATH"
+}
+
+provision_media_folder() {
+    msg_info "Provisioning Media folder"
+    
+    local media_path="$DEST_HOST_PATH/Media"
+    
+    if [ ! -d "$media_path" ]; then
+        mkdir -p "$media_path"
+        chmod 777 "$media_path"
+        msg_ok "Created: $media_path (permissions: 777)"
+    else
+        chmod 777 "$media_path"
+        msg_ok "Media folder exists: $media_path (permissions updated)"
+    fi
 }
 
 ################################################################################
@@ -136,77 +213,35 @@ ensure_template() {
     
     # Check if any Debian 12 template already exists
     if pveam list local 2>/dev/null | grep -q "debian-12"; then
-        # Format: local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst  SIZE  DATE
         TEMPLATE=$(pveam list local | grep "debian-12" | head -1 | sed 's/.*vztmpl\///' | awk '{print $1}')
         msg_ok "Template found: $TEMPLATE"
         return
     fi
     
-    msg_info "Downloading Debian 12 template (this may take a few minutes)"
-    msg_info "Updating template list..."
-    
-    if ! pveam update 2>&1 | tee /tmp/pveam-update.log; then
-        msg_warn "Template list update had issues, continuing..."
-    fi
+    msg_info "Downloading Debian 12 template"
+    pveam update >/dev/null 2>&1 || msg_warn "Template list update had issues"
     
     # Auto-detect the latest available Debian 12 template
-    msg_info "Detecting latest Debian 12 template..."
-    # Format: system  debian-12-standard_12.2-1_amd64.tar.zst  SIZE  SECTION
     TEMPLATE=$(pveam available | grep "debian-12-standard" | grep "amd64" | tail -1 | awk '{print $1}')
     
     if [ -z "$TEMPLATE" ]; then
-        msg_error "No Debian 12 template found in repository"
-        echo -e "\n${YW}Available templates:${CL}"
-        pveam available | grep debian | head -10
-        echo ""
-        echo -e "${YW}Troubleshooting:${CL}"
-        echo "1. Check internet connectivity: ping -c 3 download.proxmox.com"
-        echo "2. Update template list manually: pveam update"
-        echo "3. List all available templates: pveam available"
-        echo ""
+        msg_error "No Debian 12 template found"
         exit 1
     fi
     
-    msg_info "Downloading template: $TEMPLATE"
-    echo -e "${BL}[INFO]${CL} This may take 2-5 minutes depending on your connection..."
-    
-    if pveam download local "$TEMPLATE" 2>&1 | tee /tmp/pveam-download.log; then
-        msg_ok "Template downloaded successfully"
+    echo -e "\n${BL}[INFO]${CL} Downloading $TEMPLATE (this may take 2-5 minutes)..."
+    if pveam download local "$TEMPLATE"; then
+        msg_ok "Template downloaded"
     else
         msg_error "Template download failed"
-        echo -e "\n${YW}Debug Information:${CL}"
-        echo "Template: $TEMPLATE"
-        echo "Storage: local"
-        echo ""
-        echo "Download log:"
-        cat /tmp/pveam-download.log 2>/dev/null || echo "No log available"
-        echo ""
-        echo -e "${YW}Try manually:${CL}"
-        echo "pveam update"
-        echo "pveam available | grep debian-12"
-        echo "pveam download local <template-name>"
-        echo ""
         exit 1
     fi
 }
 
-prepare_nas_path() {
-    msg_info "Checking NAS mount path"
-    
-    if [ -d "$NAS_HOST_PATH" ]; then
-        msg_ok "NAS path exists: $NAS_HOST_PATH"
-    else
-        msg_warn "NAS path not found, creating placeholder"
-        mkdir -p "$NAS_HOST_PATH"
-        msg_ok "Created: $NAS_HOST_PATH"
-    fi
-}
-
 ################################################################################
-# Phase 1: Proxmox Host Configuration
+# Phase 1: Host Setup
 ################################################################################
 setup_host_scripts() {
-    header_info
     echo -e "\n${BL}[Phase 1]${CL} Proxmox Host Configuration\n"
     
     msg_info "Creating USB trigger script"
@@ -214,59 +249,45 @@ setup_host_scripts() {
 #!/bin/bash
 
 DEVICE=$1
-HOST_MOUNT="/mnt/usb-pass"
-LXC_ID="__LXC_ID__"
+LXC_ID=__LXC_ID__
+MOUNT_POINT="/mnt/usb-pass"
+LOG="/var/log/usb-ingest.log"
 
-# Safety Check
-if [ -z "$DEVICE" ]; then 
-    echo "$(date): ERROR - No device specified" >> /var/log/usb-trigger.log
+echo "$(date): USB device detected: $DEVICE" >> "$LOG"
+
+# Unmount if already mounted
+umount "$MOUNT_POINT" 2>/dev/null || true
+
+# Try ntfs3 driver first (kernel 5.15+), fallback to ntfs-3g
+if mount -t ntfs3 "${DEVICE}1" "$MOUNT_POINT" 2>/dev/null; then
+    echo "$(date): Mounted with ntfs3 driver" >> "$LOG"
+elif mount -t ntfs-3g "${DEVICE}1" "$MOUNT_POINT" 2>/dev/null; then
+    echo "$(date): Mounted with ntfs-3g driver" >> "$LOG"
+else
+    echo "$(date): Mount failed for ${DEVICE}1" >> "$LOG"
     exit 1
 fi
 
-echo "$(date): USB Device Detected: $DEVICE" >> /var/log/usb-trigger.log
+echo "$(date): Triggering ingest in LXC $LXC_ID" >> "$LOG"
 
-# Create mount point if needed
-mkdir -p "$HOST_MOUNT"
+# Execute ingest script inside LXC container
+pct exec "$LXC_ID" -- /usr/local/bin/ingest-media.sh
 
-# Mount on Proxmox host
-mount -t ntfs3 -o noatime "$DEVICE" "$HOST_MOUNT" 2>/dev/null
-
-# Fallback to standard mount if ntfs3 fails
-if [ $? -ne 0 ]; then
-    echo "$(date): ntfs3 failed, trying standard mount..." >> /var/log/usb-trigger.log
-    mount "$DEVICE" "$HOST_MOUNT" 2>/dev/null
-fi
-
-# Verify Mount
-if ! mount | grep -q "$HOST_MOUNT"; then
-    echo "$(date): ERROR - Failed to mount $DEVICE" >> /var/log/usb-trigger.log
-    exit 1
-fi
-
-echo "$(date): Mounted successfully. Triggering LXC ingest..." >> /var/log/usb-trigger.log
-
-# Execute ingest script inside LXC
-pct exec $LXC_ID -- /usr/local/bin/ingest-media.sh
-
-# Cleanup
-echo "$(date): Ingest finished. Cleaning up..." >> /var/log/usb-trigger.log
-sync
-sleep 2
-umount "$HOST_MOUNT" 2>/dev/null
-
-echo "$(date): Complete. Drive unmounted." >> /var/log/usb-trigger.log
+echo "$(date): Ingest complete, unmounting USB" >> "$LOG"
+umount "$MOUNT_POINT"
 EOFSCRIPT
     
     chmod +x /usr/local/bin/usb-trigger.sh
     msg_ok "USB trigger script created"
     
-    msg_info "Creating mount point"
-    mkdir -p /mnt/usb-pass
-    msg_ok "Mount point /mnt/usb-pass created"
+    msg_info "Creating USB mount point"
+    mkdir -p "$USB_MOUNT"
+    msg_ok "Mount point $USB_MOUNT created"
     
-    msg_info "Setting up udev rules"
-    cat > /etc/udev/rules.d/99-ingest.rules << 'EOF'
-ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="sd[a-z]", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", RUN+="/usr/bin/systemd-run --no-block --unit=media-ingest-%k /usr/local/bin/usb-trigger.sh /dev/%k"
+    msg_info "Configuring udev rules"
+    cat > /etc/udev/rules.d/99-usb-media-ingest.rules << 'EOF'
+# Universal USB Media Ingest - Catch all USB storage devices
+ACTION=="add", KERNEL=="sd[a-z]", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", ENV{ID_BUS}=="usb", RUN+="/bin/bash -c '/usr/bin/systemd-run --no-block --unit=media-ingest-$kernel-$(date +%%s) /usr/local/bin/usb-trigger.sh /dev/$kernel'"
 EOF
     
     udevadm control --reload-rules
@@ -275,7 +296,7 @@ EOF
 }
 
 ################################################################################
-# Phase 2: LXC Container Creation (Zero-Touch)
+# Phase 2: LXC Container Creation
 ################################################################################
 create_container() {
     echo -e "\n${BL}[Phase 2]${CL} LXC Container Creation\n"
@@ -284,16 +305,13 @@ create_container() {
     if pct status $CTID &>/dev/null; then
         msg_warn "Container $CTID already exists, skipping creation"
         CONTAINER_EXISTS=true
-        
-        # Still update the trigger script
         sed -i "s/__LXC_ID__/$CTID/g" /usr/local/bin/usb-trigger.sh 2>/dev/null || true
         return
     fi
     
     msg_info "Creating LXC container $CTID"
-    echo -e "${BL}[INFO]${CL} This may take 30-60 seconds..."
+    echo -e "\n${BL}[INFO]${CL} This may take 30-60 seconds..."
     
-    # Create container with DHCP network (using auto-detected template)
     if pct create $CTID local:vztmpl/$TEMPLATE \
         --hostname $CT_NAME \
         --password "$CT_PASSWORD" \
@@ -305,33 +323,18 @@ create_container() {
         --features nesting=1,fuse=1 \
         --unprivileged 0 \
         --onboot 1 \
-        --start 0 2>&1 | tee /tmp/pct-create.log; then
+        --start 0; then
         msg_ok "Container $CTID created"
     else
         msg_error "Container creation failed"
-        echo -e "\n${YW}Debug Information:${CL}"
-        echo "Container ID: $CTID"
-        echo "Template: $TEMPLATE"
-        echo "Storage: $STORAGE"
-        echo "Hostname: $CT_NAME"
-        echo ""
-        echo "Creation log:"
-        cat /tmp/pct-create.log 2>/dev/null || echo "No log available"
-        echo ""
-        echo -e "${YW}Troubleshooting:${CL}"
-        echo "1. Check if container ID is available: pct status $CTID"
-        echo "2. Verify template exists: pveam list local | grep debian-12"
-        echo "3. Check storage space: pvesm status"
-        echo "4. Manually create: pct create $CTID local:vztmpl/$TEMPLATE --hostname $CT_NAME"
-        echo ""
         exit 1
     fi
     
     msg_info "Configuring bind mounts"
     # USB bind mount
-    pct set $CTID -mp0 /mnt/usb-pass,mp=/media/usb-ingest
-    # NAS bind mount
-    pct set $CTID -mp1 $NAS_HOST_PATH,mp=/media/nas
+    pct set $CTID -mp0 $USB_MOUNT,mp=/media/usb-ingest
+    # Destination bind mount (user-selected path)
+    pct set $CTID -mp1 "$DEST_HOST_PATH",mp="$DEST_LXC_PATH"
     msg_ok "Bind mounts configured"
     
     # Update usb-trigger.sh with actual container ID
@@ -350,7 +353,7 @@ bootstrap_container() {
     echo -e "\n${BL}[Phase 3]${CL} Container Bootstrap\n"
     
     msg_info "Waiting for container to be ready"
-    sleep 3
+    sleep 5
     msg_ok "Container ready"
     
     msg_info "Updating package lists"
@@ -358,29 +361,19 @@ bootstrap_container() {
     msg_ok "Package lists updated"
     
     msg_info "Installing base dependencies"
-    pct exec $CTID -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git rsync ntfs-3g python3 sudo" >/dev/null 2>&1
+    pct exec $CTID -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync ntfs-3g python3 python3-pip curl >/dev/null 2>&1"
     msg_ok "Base dependencies installed"
-    
-    msg_info "Installing Node.js 18.x"
-    pct exec $CTID -- bash -c "curl -fsSL https://deb.nodesource.com/setup_18.x | bash - >/dev/null 2>&1"
-    pct exec $CTID -- bash -c "apt-get install -y -qq nodejs" >/dev/null 2>&1
-    msg_ok "Node.js installed"
     
     msg_info "Creating log file"
     pct exec $CTID -- bash -c "touch /var/log/media-ingest.log && chmod 644 /var/log/media-ingest.log"
     msg_ok "Log file created"
     
     msg_info "Deploying ingest script"
-    
-    # Try to push from local scripts directory, or create inline
-    if [ -f "$(dirname "$0")/scripts/ingest-media.sh" ]; then
-        pct push $CTID "$(dirname "$0")/scripts/ingest-media.sh" /usr/local/bin/ingest-media.sh
-    else
-        pct exec $CTID -- bash -c 'cat > /usr/local/bin/ingest-media.sh << '\''EOFSCRIPT'\''
+    pct exec $CTID -- bash -c "cat > /usr/local/bin/ingest-media.sh" << 'EOFSCRIPT'
 #!/bin/bash
 
 SEARCH_ROOT="/media/usb-ingest"
-DEST_ROOT="/media/nas"
+DEST_ROOT="/media/destination/Media"
 LOG="/var/log/media-ingest.log"
 
 echo "========================================" >> "$LOG"
@@ -405,7 +398,7 @@ sync_folder() {
         echo "Syncing $SRC_SUB -> $DST_PATH" >> "$LOG"
         echo "SYNC_START:$FOLDER_NAME" >> "$LOG"
 
-        stdbuf -oL rsync -rvh -W --inplace --progress --ignore-existing "$SRC_SUB/" "$DST_PATH/" 2>&1 | tr '\''\r'\'' '\''\n'\'' >> "$LOG"
+        stdbuf -oL rsync -rvh -W --inplace --progress --ignore-existing "$SRC_SUB/" "$DST_PATH/" 2>&1 | tr '\r' '\n' >> "$LOG"
 
         echo "SYNC_END:$FOLDER_NAME" >> "$LOG"
     else
@@ -418,63 +411,305 @@ sync_folder "Series"
 sync_folder "Anime"
 
 echo "$(date): Ingest Complete." >> "$LOG"
-EOFSCRIPT'
-    fi
+EOFSCRIPT
     
     pct exec $CTID -- chmod +x /usr/local/bin/ingest-media.sh
     msg_ok "Ingest script deployed"
 }
 
 ################################################################################
-# Phase 4: Dashboard Deployment
+# Phase 4: Python Dashboard Deployment
 ################################################################################
 deploy_dashboard() {
     echo -e "\n${BL}[Phase 4]${CL} Dashboard Deployment\n"
     
     msg_info "Creating application directory"
     pct exec $CTID -- mkdir -p /opt/dashboard
-    msg_ok "Directory created"
+    msg_ok "Application directory created"
     
-    # Check if we can clone from git
-    REPO_URL="http://192.168.1.14:3000/spooky/mediaingestDashboard.git"
-    msg_info "Cloning dashboard repository"
-    
-    if pct exec $CTID -- bash -c "cd /opt/dashboard && git clone http://192.168.1.14:3000/spooky/mediaingestDashboard.git . 2>/dev/null"; then
-        msg_ok "Repository cloned"
-    else
-        msg_warn "Git clone failed, deploying files manually"
+    msg_info "Deploying Python dashboard"
+    pct exec $CTID -- bash -c "cat > /opt/dashboard/dashboard.py" << 'EOFPYTHON'
+#!/usr/bin/env python3
+"""
+Media Ingest Dashboard - Single File Python Web Application
+Real-time monitoring of USB media ingest operations
+"""
+
+import http.server
+import socketserver
+import json
+import os
+import re
+from datetime import datetime
+from urllib.parse import urlparse, parse_qs
+
+LOG_FILE = "/var/log/media-ingest.log"
+PORT = 3000
+
+class IngestDashboard(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
         
-        # Deploy server.js
-        if [ -f "$(dirname "$0")/server.js" ]; then
-            pct push $CTID "$(dirname "$0")/server.js" /opt/dashboard/server.js
-            pct push $CTID "$(dirname "$0")/package.json" /opt/dashboard/package.json
-        fi
+        if parsed_path.path == '/api/logs':
+            self.serve_logs()
+        elif parsed_path.path == '/api/status':
+            self.serve_status()
+        else:
+            self.serve_dashboard()
+    
+    def serve_dashboard(self):
+        """Serve the main HTML dashboard"""
+        html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Ingest Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        .status-card {
+            flex: 1;
+            min-width: 200px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+            text-align: center;
+        }
+        .status-card h3 {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-bottom: 10px;
+        }
+        .status-card .value {
+            font-size: 2em;
+            font-weight: bold;
+        }
+        .log-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+        .log-entry {
+            padding: 8px;
+            margin-bottom: 5px;
+            border-left: 3px solid #4CAF50;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+        }
+        .log-entry.sync-start {
+            border-left-color: #2196F3;
+            background: rgba(33, 150, 243, 0.1);
+        }
+        .log-entry.sync-end {
+            border-left-color: #4CAF50;
+            background: rgba(76, 175, 80, 0.1);
+        }
+        .log-entry.error {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2em;
+            opacity: 0.7;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📀 Media Ingest Dashboard</h1>
+            <p>Real-time USB Media Transfer Monitor</p>
+        </header>
         
-        # Deploy client files
-        if [ -d "$(dirname "$0")/client" ]; then
-            pct exec $CTID -- mkdir -p /opt/dashboard/client/src
-            pct push $CTID "$(dirname "$0")/client/package.json" /opt/dashboard/client/package.json
-            pct push $CTID "$(dirname "$0")/client/index.html" /opt/dashboard/client/index.html
-            pct push $CTID "$(dirname "$0")/client/vite.config.js" /opt/dashboard/client/vite.config.js
-            pct push $CTID "$(dirname "$0")/client/tailwind.config.js" /opt/dashboard/client/tailwind.config.js
-            pct push $CTID "$(dirname "$0")/client/postcss.config.js" /opt/dashboard/client/postcss.config.js
-            pct push $CTID "$(dirname "$0")/client/src/App.jsx" /opt/dashboard/client/src/App.jsx
-            pct push $CTID "$(dirname "$0")/client/src/main.jsx" /opt/dashboard/client/src/main.jsx
-            pct push $CTID "$(dirname "$0")/client/src/index.css" /opt/dashboard/client/src/index.css
-        fi
-        msg_ok "Files deployed manually"
-    fi
+        <div class="status-bar">
+            <div class="status-card">
+                <h3>Current Status</h3>
+                <div class="value" id="status">IDLE</div>
+            </div>
+            <div class="status-card">
+                <h3>Active Transfers</h3>
+                <div class="value" id="activeTransfers">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Total Syncs</h3>
+                <div class="value" id="totalSyncs">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Last Activity</h3>
+                <div class="value" id="lastActivity" style="font-size: 1.2em;">Never</div>
+            </div>
+        </div>
+        
+        <div class="log-container" id="logContainer">
+            <div class="loading pulse">Loading logs...</div>
+        </div>
+    </div>
     
-    msg_info "Installing backend dependencies"
-    pct exec $CTID -- bash -c "cd /opt/dashboard && npm install --silent" >/dev/null 2>&1
-    msg_ok "Backend dependencies installed"
+    <script>
+        let lastLogSize = 0;
+        
+        async function fetchLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+                
+                if (data.logs.length > 0) {
+                    displayLogs(data.logs);
+                    updateStatus(data);
+                }
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+            }
+        }
+        
+        function displayLogs(logs) {
+            const container = document.getElementById('logContainer');
+            container.innerHTML = logs.map(log => {
+                let className = 'log-entry';
+                if (log.includes('SYNC_START')) className += ' sync-start';
+                if (log.includes('SYNC_END')) className += ' sync-end';
+                if (log.includes('failed') || log.includes('error')) className += ' error';
+                return `<div class="${className}">${escapeHtml(log)}</div>`;
+            }).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function updateStatus(data) {
+            const isSyncing = data.logs.some(log => 
+                log.includes('SYNC_START') && 
+                !data.logs.slice(data.logs.indexOf(log)).some(l => l.includes('SYNC_END'))
+            );
+            
+            document.getElementById('status').textContent = isSyncing ? 'SYNCING' : 'IDLE';
+            document.getElementById('status').style.color = isSyncing ? '#4CAF50' : '#FFC107';
+            
+            const syncStarts = data.logs.filter(log => log.includes('SYNC_START')).length;
+            const syncEnds = data.logs.filter(log => log.includes('SYNC_END')).length;
+            document.getElementById('activeTransfers').textContent = Math.max(0, syncStarts - syncEnds);
+            document.getElementById('totalSyncs').textContent = syncEnds;
+            
+            if (data.logs.length > 0) {
+                const lastLog = data.logs[data.logs.length - 1];
+                const timeMatch = lastLog.match(/\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}/);
+                if (timeMatch) {
+                    document.getElementById('lastActivity').textContent = timeMatch[0].split(' ')[1];
+                }
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Fetch logs every 2 seconds
+        setInterval(fetchLogs, 2000);
+        fetchLogs(); // Initial fetch
+    </script>
+</body>
+</html>"""
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html.encode())
     
-    msg_info "Building frontend"
-    pct exec $CTID -- bash -c "cd /opt/dashboard/client && npm install --silent && npm run build" >/dev/null 2>&1
-    msg_ok "Frontend built"
+    def serve_logs(self):
+        """Serve log data as JSON"""
+        try:
+            if os.path.exists(LOG_FILE):
+                with open(LOG_FILE, 'r') as f:
+                    logs = f.readlines()[-100:]  # Last 100 lines
+                    logs = [log.strip() for log in logs if log.strip()]
+            else:
+                logs = ["Log file not found. Waiting for first USB ingest..."]
+            
+            data = {'logs': logs, 'count': len(logs)}
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+        except Exception as e:
+            self.send_error(500, f"Error reading logs: {str(e)}")
+    
+    def serve_status(self):
+        """Serve system status"""
+        status = {
+            'status': 'running',
+            'log_file': LOG_FILE,
+            'log_exists': os.path.exists(LOG_FILE)
+        }
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(status).encode())
+    
+    def log_message(self, format, *args):
+        """Suppress default logging"""
+        pass
+
+def main():
+    with socketserver.TCPServer(("", PORT), IngestDashboard) as httpd:
+        print(f"Dashboard running on port {PORT}")
+        httpd.serve_forever()
+
+if __name__ == "__main__":
+    main()
+EOFPYTHON
+    
+    pct exec $CTID -- chmod +x /opt/dashboard/dashboard.py
+    msg_ok "Python dashboard deployed"
     
     msg_info "Creating systemd service"
-    pct exec $CTID -- bash -c 'cat > /etc/systemd/system/ingest-dashboard.service << '\''EOF'\''
+    pct exec $CTID -- bash -c "cat > /etc/systemd/system/mediaingest-dashboard.service" << 'EOFSVC'
 [Unit]
 Description=Media Ingest Dashboard
 After=network.target
@@ -483,71 +718,67 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/dashboard
-ExecStart=/usr/bin/node /opt/dashboard/server.js
+ExecStart=/usr/bin/python3 /opt/dashboard/dashboard.py
 Restart=always
 RestartSec=10
-Environment="NODE_ENV=production"
 
 [Install]
 WantedBy=multi-user.target
-EOF'
+EOFSVC
+    
     msg_ok "Systemd service created"
     
-    msg_info "Enabling and starting dashboard service"
+    msg_info "Starting dashboard service"
     pct exec $CTID -- systemctl daemon-reload
-    pct exec $CTID -- systemctl enable ingest-dashboard.service >/dev/null 2>&1
-    pct exec $CTID -- systemctl start ingest-dashboard.service
+    pct exec $CTID -- systemctl enable mediaingest-dashboard.service >/dev/null 2>&1
+    pct exec $CTID -- systemctl start mediaingest-dashboard.service
     sleep 3
     msg_ok "Dashboard service started"
 }
 
 ################################################################################
-# Final Summary
+# Summary
 ################################################################################
 show_summary() {
-    # Get container IP
-    local CT_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
+    local IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
     
-    clear
-    header_info
+    echo -e "\n${GN}═══════════════════════════════════════════════════════════════${CL}"
+    echo -e "${GN}            Installation Complete! 🎉                          ${CL}"
+    echo -e "${GN}═══════════════════════════════════════════════════════════════${CL}\n"
     
-    echo -e "\n${GN}════════════════════════════════════════════════════════════════${CL}"
-    echo -e "${GN}               Installation Complete! 🎉${CL}"
-    echo -e "${GN}════════════════════════════════════════════════════════════════${CL}\n"
-    
-    echo -e "${BL}Container Information:${CL}"
-    echo -e "  ID: ${GN}$CTID${CL}"
-    echo -e "  Name: ${GN}$CT_NAME${CL}"
-    echo -e "  IP: ${GN}$CT_IP${CL}"
-    
-    echo -e "\n${BL}Dashboard Access:${CL}"
-    echo -e "  ${GN}http://$CT_IP:3000${CL}"
-    
-    echo -e "\n${BL}Mount Points:${CL}"
-    echo -e "  USB: ${GN}/media/usb-ingest${CL}"
-    echo -e "  NAS: ${GN}/media/nas${CL}"
-    
-    echo -e "\n${BL}Useful Commands:${CL}"
-    echo -e "  Access container:  ${YW}pct enter $CTID${CL}"
-    echo -e "  View logs:         ${YW}pct exec $CTID -- tail -f /var/log/media-ingest.log${CL}"
-    echo -e "  Service status:    ${YW}pct exec $CTID -- systemctl status ingest-dashboard${CL}"
-    echo -e "  Restart service:   ${YW}pct exec $CTID -- systemctl restart ingest-dashboard${CL}"
-    
-    echo -e "\n${BL}Next Steps:${CL}"
-    echo -e "  1. Access the dashboard at http://$CT_IP:3000"
-    echo -e "  2. Plug in a USB drive with a 'Media' folder"
-    echo -e "  3. Watch the magic happen! ✨"
-    
-    echo -e "\n${GN}════════════════════════════════════════════════════════════════${CL}\n"
+    echo -e "${BL}Configuration Summary:${CL}"
+    echo -e "  ${CY}Container ID:${CL}      $CTID"
+    echo -e "  ${CY}Container Name:${CL}    $CT_NAME"
+    echo -e "  ${CY}Password:${CL}          $CT_PASSWORD"
+    echo -e "  ${CY}Dashboard URL:${CL}     ${GN}http://$IP:3000${CL}"
+    echo ""
+    echo -e "${BL}Storage Configuration:${CL}"
+    echo -e "  ${CY}Host Path:${CL}         $DEST_HOST_PATH"
+    echo -e "  ${CY}LXC Path:${CL}          $DEST_LXC_PATH"
+    echo -e "  ${CY}Media Folder:${CL}      $DEST_HOST_PATH/Media"
+    echo ""
+    echo -e "${BL}How It Works:${CL}"
+    echo -e "  1. Insert USB drive with a ${GN}Media${CL} folder"
+    echo -e "  2. System auto-detects and mounts the USB"
+    echo -e "  3. Syncs Movies, Series, Anime to: ${GN}$DEST_HOST_PATH/Media${CL}"
+    echo -e "  4. Monitor progress at: ${GN}http://$IP:3000${CL}"
+    echo ""
+    echo -e "${BL}Useful Commands:${CL}"
+    echo -e "  ${CY}View logs:${CL}         tail -f /var/log/media-ingest.log (in container)"
+    echo -e "  ${CY}Access container:${CL}  pct enter $CTID"
+    echo -e "  ${CY}Restart dashboard:${CL} pct exec $CTID -- systemctl restart mediaingest-dashboard"
+    echo -e "  ${CY}Test USB trigger:${CL}  /usr/local/bin/usb-trigger.sh /dev/sdX"
+    echo ""
+    echo -e "${GN}Ready to ingest media! Insert a USB drive to begin.${CL}\n"
 }
 
 ################################################################################
-# Main Execution (Zero-Touch)
+# Main Execution
 ################################################################################
 main() {
     header_info
-    echo -e "\n${GN}═══════════════════════════════════════════════════════════════${CL}"
-    echo -e "${GN}        Zero-Touch Installation - No User Input Required        ${CL}"
+    echo -e "${GN}═══════════════════════════════════════════════════════════════${CL}"
+    echo -e "${GN}     Intelligent Installer - Select Destination Once Only      ${CL}"
     echo -e "${GN}═══════════════════════════════════════════════════════════════${CL}\n"
     sleep 2
     
@@ -555,11 +786,17 @@ main() {
     check_root
     check_proxmox
     
+    # User selects destination (ONLY user interaction)
+    scan_destinations
+    provision_media_folder
+    
+    echo -e "\n${GN}Starting automated installation...${CL}\n"
+    sleep 2
+    
     # Auto-Detection
     get_next_ctid
     detect_storage
     ensure_template
-    prepare_nas_path
     
     # Phase 1: Host Setup
     setup_host_scripts
