@@ -277,22 +277,26 @@ setup_host_scripts() {
     cat > /usr/local/bin/usb-trigger.sh << 'EOFSCRIPT'
 #!/bin/bash
 
-DEVICE=$1
+KERNEL_DEVICE=$1
+DEVICE="/dev/$KERNEL_DEVICE"
 HOST_MOUNT="/mnt/usb-pass"
 LXC_ID="__LXC_ID__"
 
 # Safety Check
-if [ -z "$DEVICE" ]; then 
+if [ -z "$KERNEL_DEVICE" ]; then 
     echo "$(date): ERROR - No device specified" >> /var/log/usb-trigger.log
     exit 1
 fi
 
-echo "$(date): USB Device Detected: $DEVICE" >> /var/log/usb-trigger.log
+echo "$(date): USB Device Detected: $DEVICE (kernel: $KERNEL_DEVICE)" >> /var/log/usb-trigger.log
+
+# Wait for device to be ready
+sleep 2
 
 # Create mount point if needed
 mkdir -p "$HOST_MOUNT"
 
-# Mount on Proxmox host
+# Mount on Proxmox host (try ntfs3 first, then fallback)
 mount -t ntfs3 -o noatime "$DEVICE" "$HOST_MOUNT" 2>/dev/null
 
 # Fallback to standard mount if ntfs3 fails
@@ -329,13 +333,22 @@ EOFSCRIPT
     msg_ok "Mount point /mnt/usb-pass created"
     
     msg_info "Setting up udev rules"
-    cat > /etc/udev/rules.d/99-ingest.rules << 'EOF'
-ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="sd[a-z]", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", RUN+="/usr/bin/systemd-run --no-block --unit=media-ingest-%k /usr/local/bin/usb-trigger.sh /dev/%k"
+    cat > /etc/udev/rules.d/99-usb-ingest.rules << 'EOF'
+# USB Media Ingest - Trigger on USB storage device insertion
+ACTION=="add", KERNEL=="sd[a-z]", SUBSYSTEM=="block", RUN+="/usr/local/bin/usb-trigger.sh %k"
 EOF
     
+    # Reload and verify udev rules
     udevadm control --reload-rules
     udevadm trigger
-    msg_ok "udev rules configured"
+    
+    # Verify udev rule was created
+    if [ ! -f /etc/udev/rules.d/99-usb-ingest.rules ]; then
+        msg_error "Failed to create udev rule"
+        exit 1
+    fi
+    
+    msg_ok "udev rules configured and verified"
 }
 
 ################################################################################
@@ -591,9 +604,32 @@ show_summary() {
     echo -e "  USB: ${GN}/media/usb-ingest${CL}"
     echo -e "  NAS: ${GN}/media/nas${CL}"
     
+    echo -e "\n${BL}System Verification:${CL}"
+    # Check udev rule
+    if [ -f /etc/udev/rules.d/99-usb-ingest.rules ]; then
+        echo -e "  USB Detection: ${GN}✓ Active${CL}"
+    else
+        echo -e "  USB Detection: ${RD}✗ Missing udev rule${CL}"
+    fi
+    
+    # Check trigger script
+    if [ -x /usr/local/bin/usb-trigger.sh ]; then
+        echo -e "  USB Trigger:   ${GN}✓ Installed${CL}"
+    else
+        echo -e "  USB Trigger:   ${RD}✗ Missing script${CL}"
+    fi
+    
+    # Check dashboard service
+    if pct exec $CTID -- systemctl is-active --quiet ingest-dashboard 2>/dev/null; then
+        echo -e "  Dashboard:     ${GN}✓ Running${CL}"
+    else
+        echo -e "  Dashboard:     ${YW}⚠ Check service${CL}"
+    fi
+    
     echo -e "\n${BL}Useful Commands:${CL}"
     echo -e "  Access container:  ${YW}pct enter $CTID${CL}"
-    echo -e "  View logs:         ${YW}pct exec $CTID -- tail -f /var/log/media-ingest.log${CL}"
+    echo -e "  View host logs:    ${YW}tail -f /var/log/usb-trigger.log${CL}"
+    echo -e "  View ingest logs:  ${YW}pct exec $CTID -- tail -f /var/log/media-ingest.log${CL}"
     echo -e "  Service status:    ${YW}pct exec $CTID -- systemctl status ingest-dashboard${CL}"
     echo -e "  Restart service:   ${YW}pct exec $CTID -- systemctl restart ingest-dashboard${CL}"
     
