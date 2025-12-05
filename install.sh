@@ -289,9 +289,10 @@ create_container() {
     fi
     
     msg_info "Creating LXC container $CTID"
+    echo -e "${BL}[INFO]${CL} This may take 30-60 seconds..."
     
     # Create container with DHCP network (using auto-detected template)
-    pct create $CTID local:vztmpl/$TEMPLATE \
+    if pct create $CTID local:vztmpl/$TEMPLATE \
         --hostname $CT_NAME \
         --password "$CT_PASSWORD" \
         --cores $CT_CORES \
@@ -302,9 +303,27 @@ create_container() {
         --features nesting=1,fuse=1 \
         --unprivileged 0 \
         --onboot 1 \
-        --start 0 >/dev/null 2>&1
-    
-    msg_ok "Container $CTID created"
+        --start 0 2>&1 | tee /tmp/pct-create.log; then
+        msg_ok "Container $CTID created"
+    else
+        msg_error "Container creation failed"
+        echo -e "\n${YW}Debug Information:${CL}"
+        echo "Container ID: $CTID"
+        echo "Template: $TEMPLATE"
+        echo "Storage: $STORAGE"
+        echo "Hostname: $CT_NAME"
+        echo ""
+        echo "Creation log:"
+        cat /tmp/pct-create.log 2>/dev/null || echo "No log available"
+        echo ""
+        echo -e "${YW}Troubleshooting:${CL}"
+        echo "1. Check if container ID is available: pct status $CTID"
+        echo "2. Verify template exists: pveam list local | grep debian-12"
+        echo "3. Check storage space: pvesm status"
+        echo "4. Manually create: pct create $CTID local:vztmpl/$TEMPLATE --hostname $CT_NAME"
+        echo ""
+        exit 1
+    fi
     
     msg_info "Configuring bind mounts"
     # USB bind mount
