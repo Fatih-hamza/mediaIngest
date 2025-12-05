@@ -1,28 +1,104 @@
-# Universal Media Ingest — Monitor
+# Media Ingest System
 
-This project provides a simple Node/Express backend and a Vite + React frontend for monitoring a media ingest process (rsync) on a Linux host.
+A modern, real-time monitoring dashboard for automated USB-to-NAS media transfers using Proxmox, LXC containers, and rsync.
 
-Quick start
+![Dashboard Preview](https://img.shields.io/badge/Status-Production%20Ready-success)
+![Platform](https://img.shields.io/badge/Platform-Proxmox%20%2B%20LXC-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-1. Install backend deps and start server (runs on port 3000):
+## ✨ Features
 
+- 🔄 **Automatic USB Detection** - Plug and play with udev rules
+- 📊 **Real-time Progress Monitoring** - Live transfer updates every 500ms
+- 📁 **Multi-folder Sync** - Movies, Series, Anime, and custom folders
+- 📈 **Transfer History** - Persistent tracking of all completed transfers
+- 💾 **Storage Health** - Monitor NAS and USB capacity
+- 🎮 **Control Actions** - Abort, Eject, and Scan controls
+- 📱 **Responsive Design** - Mobile-first, works on all devices
+- 🎨 **Dark Mode UI** - ProxMux-inspired Bento Grid layout
+- ⚡ **High Performance** - 50-70 MB/s transfer speeds
+
+## 🚀 Quick Install
+
+### One-Line Installation:
+
+**On Proxmox Host:**
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh)"
+```
+
+**On LXC Container:**
+```bash
+bash -c "$(wget -qLO - https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh)"
+```
+
+See [INSTALL.md](INSTALL.md) for detailed installation instructions.
+
+## 📖 Documentation
+
+- [Quick Install Guide](INSTALL.md) - One-line installer
+- [Full Deployment Guide](DEPLOYMENT_GUIDE.md) - Step-by-step manual setup
+- [Scripts Documentation](scripts/README.md) - Script usage and customization
+
+## 🏗️ Architecture
+
+```
+Proxmox Host → USB Detection (udev) → LXC Container → Rsync → NAS
+                     ↓
+            Real-time Dashboard (React + Node.js)
+```
+
+## 🔧 Tech Stack
+
+**Frontend:**
+- React 18.2 + Vite 4.5
+- Tailwind CSS 3.3
+- Framer Motion 10.16
+- Lucide React Icons
+
+**Backend:**
+- Node.js + Express 4.18
+- Real-time log parsing
+- RESTful API
+
+**Infrastructure:**
+- Proxmox VE
+- LXC Containers
+- rsync with progress tracking
+- systemd services
+- udev automation
+
+## 📊 API Endpoints
+
+- `GET /api/status` - Current transfer status
+- `GET /api/history` - Transfer history (last 10)
+- `GET /api/stats` - System statistics
+- `GET /api/storage` - Storage health (NAS, USB)
+- `POST /api/abort` - Abort current transfer
+- `POST /api/eject` - Eject USB drive
+- `POST /api/scan` - Trigger media library scan
+
+## 🛠️ Development
+
+### Backend (Node.js + Express)
 ```bash
 cd /home/spooky/Desktop/copyMontior
 npm install
-npm start
+npm start  # Runs on port 3000
 ```
 
-2. In a separate terminal, start the frontend (dev mode):
-
+### Frontend (React + Vite)
 ```bash
 cd /home/spooky/Desktop/copyMontior/client
 npm install
-npm run dev
+npm run dev  # Development mode with HMR
+npm run build  # Production build
 ```
 
-The frontend (Vite) will proxy to `/api/*` on the same host — in production you can build the client and serve `client/dist` from the Express server.
+## 📝 License
 
-Endpoints
+MIT License - see [LICENSE](LICENSE) file for details
 
-- `GET /api/logs` — returns last 200 lines of `/var/log/media-ingest.log`.
-- `GET /api/status` — returns `{ syncing: true|false }` depending on whether `rsync` is running.
+---
+
+**Made with ❤️ for Home Lab enthusiasts**
