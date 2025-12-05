@@ -335,7 +335,10 @@ EOFSCRIPT
     msg_ok "USB trigger script created"
     
     msg_info "Creating mount point"
+    # Clean up any stale mounts that could prevent container startup
+    umount -f /mnt/usb-pass 2>/dev/null || true
     mkdir -p /mnt/usb-pass
+    chmod 755 /mnt/usb-pass
     msg_ok "Mount point /mnt/usb-pass created"
     
     msg_info "Setting up systemd service for USB trigger"
