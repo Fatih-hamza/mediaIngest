@@ -27,7 +27,7 @@ function HeroCard({ active, current }) {
   const hasTransfer = active && current.filename
   
   return (
-    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6 lg:col-span-2">
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 md:col-span-2 lg:col-span-2 order-1">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           Active Transfer
@@ -37,20 +37,20 @@ function HeroCard({ active, current }) {
 
       {hasTransfer ? (
         <div>
-          <div className="mb-5">
-            <h3 className="text-3xl font-bold text-white mb-2 truncate">
+          <div className="mb-4 sm:mb-5">
+            <h3 className="text-xl sm:text-2xl lg:text-3xl font-bold text-white mb-2 truncate">
               {current.filename}
             </h3>
-            <p className="text-sm text-slate-500">Media file transfer in progress</p>
+            <p className="text-xs sm:text-sm text-slate-500">Media file transfer in progress</p>
           </div>
 
           {/* Progress Bar */}
-          <div className="mb-6">
+          <div className="mb-5 sm:mb-6">
             <div className="flex justify-between items-center mb-2">
               <span className="text-xs uppercase tracking-wide text-slate-500">Progress</span>
-              <span className="text-lg font-bold text-blue-400">{current.progress}%</span>
+              <span className="text-base sm:text-lg font-bold text-blue-400">{current.progress}%</span>
             </div>
-            <div className="h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+            <div className="h-4 sm:h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800 touch-manipulation">
               <motion.div
                 className="h-full bg-gradient-to-r from-blue-600 to-blue-500"
                 animate={{ width: `${current.progress}%` }}
@@ -59,24 +59,24 @@ function HeroCard({ active, current }) {
             </div>
           </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-slate-950/50 rounded-lg p-4 border border-slate-800/50">
+          {/* Stats Grid - Responsive */}
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="bg-slate-950/50 rounded-lg p-3 sm:p-4 border border-slate-800/50">
               <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Speed</div>
-              <div className="text-xl font-bold text-white">{current.speed || '--'}</div>
+              <div className="text-base sm:text-xl font-bold text-white truncate">{current.speed || '--'}</div>
             </div>
-            <div className="bg-slate-950/50 rounded-lg p-4 border border-slate-800/50">
+            <div className="bg-slate-950/50 rounded-lg p-3 sm:p-4 border border-slate-800/50">
               <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Size</div>
-              <div className="text-xl font-bold text-white">{current.size || '--'}</div>
+              <div className="text-base sm:text-xl font-bold text-white truncate">{current.size || '--'}</div>
             </div>
-            <div className="bg-slate-950/50 rounded-lg p-4 border border-slate-800/50">
+            <div className="bg-slate-950/50 rounded-lg p-3 sm:p-4 border border-slate-800/50">
               <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">ETA</div>
-              <div className="text-xl font-bold text-white">{current.timeRemaining || '--'}</div>
+              <div className="text-base sm:text-xl font-bold text-white truncate">{current.timeRemaining || '--'}</div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-center py-16">
+        <div className="text-center py-12 sm:py-16">
           <motion.div
             animate={{ 
               scale: [1, 1.05, 1],
@@ -84,10 +84,10 @@ function HeroCard({ active, current }) {
             }}
             transition={{ duration: 3, repeat: Infinity }}
           >
-            <HardDrive className="w-16 h-16 text-slate-800 mx-auto mb-4" />
+            <HardDrive className="w-12 h-12 sm:w-16 sm:h-16 text-slate-800 mx-auto mb-4" />
           </motion.div>
-          <h3 className="text-xl font-semibold text-slate-400 mb-2">System Ready</h3>
-          <p className="text-sm text-slate-600">Waiting for USB drive connection...</p>
+          <h3 className="text-lg sm:text-xl font-semibold text-slate-400 mb-2">System Ready</h3>
+          <p className="text-xs sm:text-sm text-slate-600">Waiting for USB drive connection...</p>
         </div>
       )}
     </div>
@@ -96,7 +96,7 @@ function HeroCard({ active, current }) {
 
 function DeviceCard() {
   return (
-    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 order-3">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           USB Device
@@ -104,18 +104,20 @@ function DeviceCard() {
         <Database className="w-4 h-4 text-slate-700" />
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Device</div>
           <div className="text-sm font-medium text-white">Samsung T7 Shield</div>
         </div>
         
-        <div>
+        {/* Hide on mobile to save space */}
+        <div className="hidden sm:block">
           <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Mount</div>
           <div className="text-xs font-mono text-slate-400">/media/usb-ingest</div>
         </div>
         
-        <div>
+        {/* Hide on mobile to save space */}
+        <div className="hidden sm:block">
           <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">FS Type</div>
           <div className="text-sm font-medium text-slate-400">NTFS (ntfs3)</div>
         </div>
@@ -137,7 +139,7 @@ function StatsCard({ stats }) {
     : 'Never';
     
   return (
-    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6">
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 order-2">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           Statistics
@@ -145,20 +147,20 @@ function StatsCard({ stats }) {
         <Zap className="w-4 h-4 text-slate-700" />
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Total Files</div>
-          <div className="text-3xl font-bold text-white">{stats.totalFiles || 0}</div>
+          <div className="text-2xl sm:text-3xl font-bold text-white">{stats.totalFiles || 0}</div>
         </div>
         
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Total Data</div>
-          <div className="text-2xl font-bold text-blue-400">{stats.totalGB || '0.00'} GB</div>
+          <div className="text-xl sm:text-2xl font-bold text-blue-400">{stats.totalGB || '0.00'} GB</div>
         </div>
         
         <div className="pt-3 border-t border-slate-800">
           <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Last Active</div>
-          <div className="text-xs text-slate-400">{lastActiveText}</div>
+          <div className="text-xs text-slate-400 truncate">{lastActiveText}</div>
         </div>
       </div>
     </div>
@@ -167,7 +169,7 @@ function StatsCard({ stats }) {
 
 function HistoryCard({ history }) {
   return (
-    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-6 lg:col-span-3">
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 md:col-span-2 lg:col-span-3 order-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           Transfer History
@@ -180,54 +182,96 @@ function HistoryCard({ history }) {
           No transfer history yet
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Type</th>
-                <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Filename</th>
-                <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Size</th>
-                <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Time</th>
-                <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((item, idx) => (
-                <motion.tr
-                  key={item.filename + item.timestamp}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.03 }}
-                  className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
-                >
-                  <td className="py-3 px-4">
-                    {item.type === 'Movie' ? (
-                      <Film className="w-4 h-4 text-blue-400" />
-                    ) : (
-                      <Tv className="w-4 h-4 text-purple-400" />
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm font-medium text-white truncate max-w-md">
-                      {item.filename}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm text-slate-400">{item.size}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-xs text-slate-500">
-                      {new Date(item.timestamp).toLocaleTimeString()}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <CheckCircle className="w-4 h-4 text-emerald-500" />
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Desktop Table View - Hidden on Mobile */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-800">
+                  <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Type</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Filename</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Size</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Time</th>
+                  <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wider text-slate-600">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((item, idx) => (
+                  <motion.tr
+                    key={item.filename + item.timestamp}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.03 }}
+                    className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors"
+                  >
+                    <td className="py-3 px-4">
+                      {item.type === 'Movie' ? (
+                        <Film className="w-4 h-4 text-blue-400" />
+                      ) : (
+                        <Tv className="w-4 h-4 text-purple-400" />
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-sm font-medium text-white truncate max-w-md">
+                        {item.filename}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-sm text-slate-400">{item.size}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="text-xs text-slate-500">
+                        {new Date(item.timestamp).toLocaleTimeString()}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card List View - Visible Only on Mobile */}
+          <div className="sm:hidden space-y-2">
+            {history.map((item, idx) => (
+              <motion.div
+                key={item.filename + item.timestamp}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.03 }}
+                className="bg-slate-950/50 border border-slate-800/50 rounded-lg p-4 flex items-center gap-3 touch-manipulation active:bg-slate-800/50 transition-colors"
+              >
+                {/* Icon */}
+                <div className="flex-shrink-0">
+                  {item.type === 'Movie' ? (
+                    <Film className="w-5 h-5 text-blue-400" />
+                  ) : (
+                    <Tv className="w-5 h-5 text-purple-400" />
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-white truncate mb-1">
+                    {item.filename}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <span>{item.size}</span>
+                    <span>•</span>
+                    <span>{new Date(item.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="flex-shrink-0">
+                  <CheckCircle className="w-5 h-5 text-emerald-500" />
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )
@@ -283,34 +327,35 @@ export default function App() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6">
+    <div className="min-h-screen bg-slate-950 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="mb-6 flex items-center justify-between">
+        {/* Header - Responsive */}
+        <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-center">
+            <div className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-center flex-shrink-0">
               <HardDrive className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Media Ingest System</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-white">Media Ingest System</h1>
               <p className="text-xs text-slate-600">Real-time monitoring & history</p>
             </div>
           </div>
           <StatusBadge active={active} />
         </header>
 
-        {/* Bento Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Hero Card - spans 2 columns */}
+        {/* Responsive Bento Grid */}
+        {/* Mobile: 1 column, Tablet: 2 columns, Desktop: 3 columns (with spans) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {/* Hero Card - Always appears first on mobile, spans 2 cols on tablet/desktop */}
           <HeroCard active={active} current={current} />
 
-          {/* Device Card */}
-          <DeviceCard />
-
-          {/* Stats Card */}
+          {/* Stats Card - Second on mobile */}
           <StatsCard stats={stats} />
 
-          {/* History Card - full width */}
+          {/* Device Card - Third on mobile */}
+          <DeviceCard />
+
+          {/* History Card - Last on mobile, spans full width */}
           <HistoryCard history={history} />
         </div>
       </div>
