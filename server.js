@@ -330,7 +330,6 @@ app.get('/api/status', (req, res) => {
   
   res.json({ ok: true, active, current });
 });
-});
 
 // API: Get history
 app.get('/api/history', (req, res) => {
