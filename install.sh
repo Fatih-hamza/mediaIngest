@@ -1,22 +1,514 @@
 #!/bin/bash
 
-#############################################
-# Media Ingest System - One-Line Installer
-# Automated deployment for Proxmox + LXC
-#############################################
+################################################################################
+# Media Ingest System - Automated Installer
+# Style inspired by Proxmox VE Helper Scripts (tteck)
+# 
+# This script automates the complete deployment:
+# - Proxmox Host USB detection setup
+# - LXC Container creation and configuration
+# - Dashboard application deployment
+################################################################################
 
 set -e
 
-REPO_URL="https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main"
-SCRIPTS_DIR="/usr/local/bin"
-SYSTEM_TYPE=""
+################################################################################
+# Color Definitions
+################################################################################
+BL='\033[36m'    # Blue
+GN='\033[1;92m'  # Green
+CL='\033[m'      # Clear
+RD='\033[01;31m' # Red
+YW='\033[1;33m'  # Yellow
+BFR="\\r\\033[K" # Back to First column and Clear Line
+HOLD="-"
+CM="${GN}✓${CL}"
+CROSS="${RD}✗${CL}"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+################################################################################
+# Helper Functions
+################################################################################
+msg_info() {
+    local msg="$1"
+    echo -ne " ${HOLD} ${YW}${msg}..."
+}
+
+msg_ok() {
+    local msg="$1"
+    echo -e "${BFR} ${CM} ${GN}${msg}${CL}"
+}
+
+msg_error() {
+    local msg="$1"
+    echo -e "${BFR} ${CROSS} ${RD}${msg}${CL}"
+}
+
+msg_warn() {
+    local msg="$1"
+    echo -e " ${YW}⚠${CL} ${msg}"
+}
+
+header_info() {
+    clear
+    cat <<"EOF"
+    __  ___          ___         ____                      __     _____            __               
+   /  |/  /__  ____/ (_)___ _   /  _/___  ____ ____  _____/ /_   / ___/__  _______/ /____  ____ ___ 
+  / /|_/ / _ \/ __  / / __ `/   / // __ \/ __ `/ _ \/ ___/ __/   \__ \/ / / / ___/ __/ _ \/ __ `__ \
+ / /  / /  __/ /_/ / / /_/ /  _/ // / / / /_/ /  __(__  ) /_    ___/ / /_/ (__  ) /_/  __/ / / / / /
+/_/  /_/\___/\__,_/_/\__,_/  /___/_/ /_/\__, /\___/____/\__/   /____/\__, /____/\__/\___/_/ /_/ /_/ 
+                                       /____/                        /____/                          
+
+                          Universal USB Media Ingest System
+                          Automated Installer v2.0
+                          
+EOF
+}
+
+################################################################################
+# Validation Functions
+################################################################################
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        msg_error "This script must be run as root"
+        echo -e "\nPlease run: ${GN}sudo bash install.sh${CL}\n"
+        exit 1
+    fi
+}
+
+check_proxmox() {
+    if [ ! -f /etc/pve/.version ]; then
+        msg_error "Proxmox VE not detected"
+        echo -e "\nThis script must be run on a Proxmox VE host.\n"
+        exit 1
+    fi
+    msg_ok "Proxmox VE detected"
+}
+
+################################################################################
+# Phase 1: Proxmox Host Configuration
+################################################################################
+setup_host_scripts() {
+    header_info
+    echo -e "\n${BL}[Phase 1]${CL} Proxmox Host Configuration\n"
+    
+    msg_info "Creating USB trigger script"
+    cat > /usr/local/bin/usb-trigger.sh << 'EOFSCRIPT'
+#!/bin/bash
+
+DEVICE=$1
+HOST_MOUNT="/mnt/usb-pass"
+LXC_ID="__LXC_ID__"
+
+# Safety Check
+if [ -z "$DEVICE" ]; then 
+    echo "$(date): ERROR - No device specified" >> /var/log/usb-trigger.log
+    exit 1
+fi
+
+echo "$(date): USB Device Detected: $DEVICE" >> /var/log/usb-trigger.log
+
+# Create mount point if needed
+mkdir -p "$HOST_MOUNT"
+
+# Mount on Proxmox host
+mount -t ntfs3 -o noatime "$DEVICE" "$HOST_MOUNT" 2>/dev/null
+
+# Fallback to standard mount if ntfs3 fails
+if [ $? -ne 0 ]; then
+    echo "$(date): ntfs3 failed, trying standard mount..." >> /var/log/usb-trigger.log
+    mount "$DEVICE" "$HOST_MOUNT" 2>/dev/null
+fi
+
+# Verify Mount
+if ! mount | grep -q "$HOST_MOUNT"; then
+    echo "$(date): ERROR - Failed to mount $DEVICE" >> /var/log/usb-trigger.log
+    exit 1
+fi
+
+echo "$(date): Mounted successfully. Triggering LXC ingest..." >> /var/log/usb-trigger.log
+
+# Execute ingest script inside LXC
+pct exec $LXC_ID -- /usr/local/bin/ingest-media.sh
+
+# Cleanup
+echo "$(date): Ingest finished. Cleaning up..." >> /var/log/usb-trigger.log
+sync
+sleep 2
+umount "$HOST_MOUNT" 2>/dev/null
+
+echo "$(date): Complete. Drive unmounted." >> /var/log/usb-trigger.log
+EOFSCRIPT
+    
+    chmod +x /usr/local/bin/usb-trigger.sh
+    msg_ok "USB trigger script created"
+    
+    msg_info "Creating mount point"
+    mkdir -p /mnt/usb-pass
+    msg_ok "Mount point /mnt/usb-pass created"
+    
+    msg_info "Setting up udev rules"
+    cat > /etc/udev/rules.d/99-ingest.rules << 'EOF'
+ACTION=="add", SUBSYSTEMS=="usb", KERNEL=="sd[a-z]", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", RUN+="/usr/bin/systemd-run --no-block --unit=media-ingest-%k /usr/local/bin/usb-trigger.sh /dev/%k"
+EOF
+    
+    udevadm control --reload-rules
+    udevadm trigger
+    msg_ok "udev rules configured"
+}
+
+################################################################################
+# Phase 2: LXC Container Creation
+################################################################################
+get_container_config() {
+    echo -e "\n${BL}[Phase 2]${CL} LXC Container Configuration\n"
+    
+    # Container ID
+    read -p "Enter Container ID [105]: " CTID
+    CTID=${CTID:-105}
+    
+    # Check if container already exists
+    if pct status $CTID &>/dev/null; then
+        msg_warn "Container $CTID already exists"
+        read -p "Use existing container? (y/N): " USE_EXISTING
+        if [[ ! "$USE_EXISTING" =~ ^[Yy]$ ]]; then
+            msg_error "Please choose a different container ID"
+            exit 1
+        fi
+        CONTAINER_EXISTS=true
+        return
+    fi
+    
+    # Container Name
+    read -p "Enter Container Name [media-ingest]: " CT_NAME
+    CT_NAME=${CT_NAME:-media-ingest}
+    
+    # Container Password
+    read -sp "Enter root password for container: " CT_PASSWORD
+    echo
+    if [ -z "$CT_PASSWORD" ]; then
+        msg_error "Password cannot be empty"
+        exit 1
+    fi
+    
+    # NAS Mount Path
+    echo -e "\n${YW}NAS Configuration:${CL}"
+    read -p "Enter NAS mount path on Proxmox host [/mnt/pve/media-nas]: " NAS_HOST_PATH
+    NAS_HOST_PATH=${NAS_HOST_PATH:-/mnt/pve/media-nas}
+    
+    if [ ! -d "$NAS_HOST_PATH" ]; then
+        msg_warn "NAS path $NAS_HOST_PATH does not exist"
+        read -p "Continue anyway? (y/N): " CONTINUE
+        if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
+    
+    # Container Resources
+    read -p "CPU cores [2]: " CT_CORES
+    CT_CORES=${CT_CORES:-2}
+    
+    read -p "Memory (MB) [2048]: " CT_MEMORY
+    CT_MEMORY=${CT_MEMORY:-2048}
+    
+    read -p "Disk size (GB) [8]: " CT_DISK
+    CT_DISK=${CT_DISK:-8}
+    
+    # Network Configuration
+    echo -e "\n${YW}Network Configuration:${CL}"
+    read -p "IP address (CIDR) [DHCP]: " CT_IP
+    CT_IP=${CT_IP:-dhcp}
+    
+    if [ "$CT_IP" != "dhcp" ]; then
+        read -p "Gateway: " CT_GW
+        read -p "DNS server [8.8.8.8]: " CT_DNS
+        CT_DNS=${CT_DNS:-8.8.8.8}
+    fi
+}
+
+create_container() {
+    if [ "$CONTAINER_EXISTS" = true ]; then
+        msg_ok "Using existing container $CTID"
+        return
+    fi
+    
+    msg_info "Creating LXC container $CTID"
+    
+    # Get latest Debian template
+    local TEMPLATE=$(pveam available | grep debian-12 | tail -n 1 | awk '{print $2}')
+    if [ -z "$TEMPLATE" ]; then
+        msg_error "No Debian 12 template found"
+        echo "Please download a template first:"
+        echo "  pveam update"
+        echo "  pveam download local debian-12-standard_12.2-1_amd64.tar.zst"
+        exit 1
+    fi
+    
+    # Build network config
+    local NET_CONFIG="name=eth0,bridge=vmbr0,firewall=1"
+    if [ "$CT_IP" = "dhcp" ]; then
+        NET_CONFIG="$NET_CONFIG,ip=dhcp"
+    else
+        NET_CONFIG="$NET_CONFIG,ip=$CT_IP,gw=$CT_GW"
+    fi
+    
+    # Create container
+    pct create $CTID local:vztmpl/$TEMPLATE \
+        --hostname $CT_NAME \
+        --password "$CT_PASSWORD" \
+        --cores $CT_CORES \
+        --memory $CT_MEMORY \
+        --rootfs local-lvm:$CT_DISK \
+        --net0 $NET_CONFIG \
+        --features nesting=1,fuse=1 \
+        --unprivileged 0 \
+        --onboot 1 \
+        --start 0 >/dev/null 2>&1
+    
+    msg_ok "Container $CTID created"
+    
+    msg_info "Configuring bind mounts"
+    # USB bind mount
+    pct set $CTID -mp0 /mnt/usb-pass,mp=/media/usb-ingest
+    # NAS bind mount
+    pct set $CTID -mp1 $NAS_HOST_PATH,mp=/media/nas
+    msg_ok "Bind mounts configured"
+    
+    # Update usb-trigger.sh with actual container ID
+    sed -i "s/__LXC_ID__/$CTID/g" /usr/local/bin/usb-trigger.sh
+    
+    msg_info "Starting container"
+    pct start $CTID
+    sleep 5
+    msg_ok "Container started"
+}
+
+################################################################################
+# Phase 3: Container Bootstrap
+################################################################################
+bootstrap_container() {
+    echo -e "\n${BL}[Phase 3]${CL} Container Bootstrap\n"
+    
+    msg_info "Waiting for container to be ready"
+    sleep 3
+    msg_ok "Container ready"
+    
+    msg_info "Updating package lists"
+    pct exec $CTID -- bash -c "apt-get update -qq" >/dev/null 2>&1
+    msg_ok "Package lists updated"
+    
+    msg_info "Installing base dependencies"
+    pct exec $CTID -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git rsync ntfs-3g python3 sudo" >/dev/null 2>&1
+    msg_ok "Base dependencies installed"
+    
+    msg_info "Installing Node.js 18.x"
+    pct exec $CTID -- bash -c "curl -fsSL https://deb.nodesource.com/setup_18.x | bash - >/dev/null 2>&1"
+    pct exec $CTID -- bash -c "apt-get install -y -qq nodejs" >/dev/null 2>&1
+    msg_ok "Node.js installed"
+    
+    msg_info "Creating log file"
+    pct exec $CTID -- bash -c "touch /var/log/media-ingest.log && chmod 644 /var/log/media-ingest.log"
+    msg_ok "Log file created"
+    
+    msg_info "Deploying ingest script"
+    pct push $CTID "$(dirname "$0")/scripts/ingest-media.sh" /usr/local/bin/ingest-media.sh 2>/dev/null || \
+    pct exec $CTID -- bash -c 'cat > /usr/local/bin/ingest-media.sh << '\''EOFSCRIPT'\''
+#!/bin/bash
+
+SEARCH_ROOT="/media/usb-ingest"
+DEST_ROOT="/media/nas"
+LOG="/var/log/media-ingest.log"
+
+echo "========================================" >> "$LOG"
+echo "$(date): New Drive Detected. Scanning for Media folder..." >> "$LOG"
+
+FOUND_SRC=$(find "$SEARCH_ROOT" -maxdepth 3 -type d -iname "Media" 2>/dev/null | head -n 1)
+
+if [ -z "$FOUND_SRC" ]; then
+    echo "Analysis: No Media folder found on this drive. Exiting." >> "$LOG"
+    ls -F "$SEARCH_ROOT" >> "$LOG" 2>&1
+    exit 0
+fi
+
+echo "Target Found: $FOUND_SRC" >> "$LOG"
+
+sync_folder() {
+    FOLDER_NAME=$1
+    SRC_SUB=$(find "$FOUND_SRC" -maxdepth 1 -type d -iname "$FOLDER_NAME" 2>/dev/null | head -n 1)
+    DST_PATH="$DEST_ROOT/$FOLDER_NAME"
+
+    if [ -n "$SRC_SUB" ]; then
+        echo "Syncing $SRC_SUB -> $DST_PATH" >> "$LOG"
+        echo "SYNC_START:$FOLDER_NAME" >> "$LOG"
+
+        stdbuf -oL rsync -rvh -W --inplace --progress --ignore-existing "$SRC_SUB/" "$DST_PATH/" 2>&1 | tr '\''\r'\'' '\''\n'\'' >> "$LOG"
+
+        echo "SYNC_END:$FOLDER_NAME" >> "$LOG"
+    else
+        echo "Skipped: $FOLDER_NAME not found inside Media folder." >> "$LOG"
+    fi
+}
+
+sync_folder "Movies"
+sync_folder "Series"
+sync_folder "Anime"
+
+echo "$(date): Ingest Complete." >> "$LOG"
+EOFSCRIPT'
+    
+    pct exec $CTID -- chmod +x /usr/local/bin/ingest-media.sh
+    msg_ok "Ingest script deployed"
+}
+
+################################################################################
+# Phase 4: Dashboard Deployment
+################################################################################
+deploy_dashboard() {
+    echo -e "\n${BL}[Phase 4]${CL} Dashboard Deployment\n"
+    
+    msg_info "Creating application directory"
+    pct exec $CTID -- mkdir -p /opt/dashboard
+    msg_ok "Directory created"
+    
+    # Check if we can clone from git
+    REPO_URL="https://github.com/YOUR_USERNAME/mediaingestDashboard.git"
+    msg_info "Cloning dashboard repository"
+    
+    if pct exec $CTID -- bash -c "cd /opt/dashboard && git clone $REPO_URL . 2>/dev/null"; then
+        msg_ok "Repository cloned"
+    else
+        msg_warn "Git clone failed, deploying files manually"
+        
+        # Deploy server.js
+        if [ -f "$(dirname "$0")/server.js" ]; then
+            pct push $CTID "$(dirname "$0")/server.js" /opt/dashboard/server.js
+            pct push $CTID "$(dirname "$0")/package.json" /opt/dashboard/package.json
+        fi
+        
+        # Deploy client files
+        if [ -d "$(dirname "$0")/client" ]; then
+            pct exec $CTID -- mkdir -p /opt/dashboard/client/src
+            pct push $CTID "$(dirname "$0")/client/package.json" /opt/dashboard/client/package.json
+            pct push $CTID "$(dirname "$0")/client/index.html" /opt/dashboard/client/index.html
+            pct push $CTID "$(dirname "$0")/client/vite.config.js" /opt/dashboard/client/vite.config.js
+            pct push $CTID "$(dirname "$0")/client/tailwind.config.js" /opt/dashboard/client/tailwind.config.js
+            pct push $CTID "$(dirname "$0")/client/postcss.config.js" /opt/dashboard/client/postcss.config.js
+            pct push $CTID "$(dirname "$0")/client/src/App.jsx" /opt/dashboard/client/src/App.jsx
+            pct push $CTID "$(dirname "$0")/client/src/main.jsx" /opt/dashboard/client/src/main.jsx
+            pct push $CTID "$(dirname "$0")/client/src/index.css" /opt/dashboard/client/src/index.css
+        fi
+        msg_ok "Files deployed manually"
+    fi
+    
+    msg_info "Installing backend dependencies"
+    pct exec $CTID -- bash -c "cd /opt/dashboard && npm install --silent" >/dev/null 2>&1
+    msg_ok "Backend dependencies installed"
+    
+    msg_info "Building frontend"
+    pct exec $CTID -- bash -c "cd /opt/dashboard/client && npm install --silent && npm run build" >/dev/null 2>&1
+    msg_ok "Frontend built"
+    
+    msg_info "Creating systemd service"
+    pct exec $CTID -- bash -c 'cat > /etc/systemd/system/ingest-dashboard.service << '\''EOF'\''
+[Unit]
+Description=Media Ingest Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/dashboard
+ExecStart=/usr/bin/node /opt/dashboard/server.js
+Restart=always
+RestartSec=10
+Environment="NODE_ENV=production"
+
+[Install]
+WantedBy=multi-user.target
+EOF'
+    msg_ok "Systemd service created"
+    
+    msg_info "Enabling and starting dashboard service"
+    pct exec $CTID -- systemctl daemon-reload
+    pct exec $CTID -- systemctl enable ingest-dashboard.service >/dev/null 2>&1
+    pct exec $CTID -- systemctl start ingest-dashboard.service
+    sleep 3
+    msg_ok "Dashboard service started"
+}
+
+################################################################################
+# Final Summary
+################################################################################
+show_summary() {
+    # Get container IP
+    local CT_IP=$(pct exec $CTID -- hostname -I | awk '{print $1}')
+    
+    clear
+    header_info
+    
+    echo -e "\n${GN}════════════════════════════════════════════════════════════════${CL}"
+    echo -e "${GN}               Installation Complete! 🎉${CL}"
+    echo -e "${GN}════════════════════════════════════════════════════════════════${CL}\n"
+    
+    echo -e "${BL}Container Information:${CL}"
+    echo -e "  ID: ${GN}$CTID${CL}"
+    echo -e "  Name: ${GN}$CT_NAME${CL}"
+    echo -e "  IP: ${GN}$CT_IP${CL}"
+    
+    echo -e "\n${BL}Dashboard Access:${CL}"
+    echo -e "  ${GN}http://$CT_IP:3000${CL}"
+    
+    echo -e "\n${BL}Mount Points:${CL}"
+    echo -e "  USB: ${GN}/media/usb-ingest${CL}"
+    echo -e "  NAS: ${GN}/media/nas${CL}"
+    
+    echo -e "\n${BL}Useful Commands:${CL}"
+    echo -e "  Access container:  ${YW}pct enter $CTID${CL}"
+    echo -e "  View logs:         ${YW}pct exec $CTID -- tail -f /var/log/media-ingest.log${CL}"
+    echo -e "  Service status:    ${YW}pct exec $CTID -- systemctl status ingest-dashboard${CL}"
+    echo -e "  Restart service:   ${YW}pct exec $CTID -- systemctl restart ingest-dashboard${CL}"
+    
+    echo -e "\n${BL}Next Steps:${CL}"
+    echo -e "  1. Access the dashboard at http://$CT_IP:3000"
+    echo -e "  2. Plug in a USB drive with a 'Media' folder"
+    echo -e "  3. Watch the magic happen! ✨"
+    
+    echo -e "\n${GN}════════════════════════════════════════════════════════════════${CL}\n"
+}
+
+################################################################################
+# Main Execution
+################################################################################
+main() {
+    header_info
+    echo -e "\n${YW}Starting automated installation...${CL}\n"
+    sleep 2
+    
+    # Validation
+    check_root
+    check_proxmox
+    
+    # Phase 1: Host Setup
+    setup_host_scripts
+    
+    # Phase 2: Container Creation
+    get_container_config
+    create_container
+    
+    # Phase 3: Container Bootstrap
+    bootstrap_container
+    
+    # Phase 4: Dashboard Deployment
+    deploy_dashboard
+    
+    # Show Summary
+    show_summary
+}
+
+# Cleanup on error
+trap 'msg_error "Installation failed! Check the output above for errors."' ERR
+
+# Run main function
+main "$@"
 
 # Logging functions
 log_info() {
