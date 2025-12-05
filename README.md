@@ -25,13 +25,13 @@ A modern, real-time monitoring dashboard for automated USB-to-NAS media transfer
 Run this single command on your **Proxmox host** to deploy everything automatically:
 
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh)"
+bash -c "$(wget -qLO - http://192.168.1.14:3000/spooky/mediaingestDashboard/raw/branch/main/install.sh)"
 ```
 
 Or download and inspect first:
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh
+wget http://192.168.1.14:3000/spooky/mediaingestDashboard/raw/branch/main/install.sh
 bash install.sh
 ```
 

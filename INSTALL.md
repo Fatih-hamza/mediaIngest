@@ -17,13 +17,13 @@ Deploy the entire Media Ingest System with a single command on your Proxmox host
 ### Step 1: Run on Proxmox Host
 
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh)"
+bash -c "$(wget -qLO - http://192.168.1.14:3000/spooky/mediaingestDashboard/raw/branch/main/install.sh)"
 ```
 
 Or download first to review:
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh
+wget http://192.168.1.14:3000/spooky/mediaingestDashboard/raw/branch/main/install.sh
 bash install.sh
 ```
 
@@ -308,7 +308,7 @@ pct exec 105 -- bash -c "cd /opt/dashboard && git pull && cd client && npm run b
 ### Update Ingest Script
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/scripts/ingest-media.sh
+wget http://192.168.1.14:3000/spooky/mediaingestDashboard/raw/branch/main/scripts/ingest-media.sh
 pct push 105 ingest-media.sh /usr/local/bin/ingest-media.sh
 pct exec 105 -- chmod +x /usr/local/bin/ingest-media.sh
 ```
@@ -316,7 +316,7 @@ pct exec 105 -- chmod +x /usr/local/bin/ingest-media.sh
 ### Update USB Trigger Script
 
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/scripts/usb-trigger.sh
+wget http://192.168.1.14:3000/spooky/mediaingestDashboard/raw/branch/main/scripts/usb-trigger.sh
 cp usb-trigger.sh /usr/local/bin/
 chmod +x /usr/local/bin/usb-trigger.sh
 # Update LXC_ID in the script if needed
@@ -383,8 +383,8 @@ If the automated installer doesn't work for your setup, see the [Full Deployment
 
 - 📖 [Full Deployment Guide](DEPLOYMENT_GUIDE.md) - Detailed manual setup
 - 📖 [Scripts Documentation](scripts/README.md) - Script usage details
-- 🐛 [GitHub Issues](https://github.com/YOUR_USERNAME/mediaingestDashboard/issues) - Report bugs
-- 💬 [GitHub Discussions](https://github.com/YOUR_USERNAME/mediaingestDashboard/discussions) - Ask questions
+- 🐛 [Gitea Issues](http://192.168.1.14:3000/spooky/mediaingestDashboard/issues) - Report bugs
+- 💬 [Gitea Repository](http://192.168.1.14:3000/spooky/mediaingestDashboard) - View source
 
 ---
 

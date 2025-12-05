@@ -370,10 +370,10 @@ deploy_dashboard() {
     msg_ok "Directory created"
     
     # Check if we can clone from git
-    REPO_URL="https://github.com/YOUR_USERNAME/mediaingestDashboard.git"
+    REPO_URL="http://192.168.1.14:3000/spooky/mediaingestDashboard.git"
     msg_info "Cloning dashboard repository"
     
-    if pct exec $CTID -- bash -c "cd /opt/dashboard && git clone $REPO_URL . 2>/dev/null"; then
+    if pct exec $CTID -- bash -c "cd /opt/dashboard && git clone http://192.168.1.14:3000/spooky/mediaingestDashboard.git . 2>/dev/null"; then
         msg_ok "Repository cloned"
     else
         msg_warn "Git clone failed, deploying files manually"
