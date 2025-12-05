@@ -20,19 +20,40 @@ A modern, real-time monitoring dashboard for automated USB-to-NAS media transfer
 
 ## 🚀 Quick Install
 
-### One-Line Installation:
+### Automated Installation (Recommended)
 
-**On Proxmox Host:**
+Run this single command on your **Proxmox host** to deploy everything automatically:
+
 ```bash
 bash -c "$(wget -qLO - https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh)"
 ```
 
-**On LXC Container:**
+Or download and inspect first:
+
 ```bash
-bash -c "$(wget -qLO - https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh)"
+wget https://raw.githubusercontent.com/YOUR_USERNAME/mediaingestDashboard/main/install.sh
+bash install.sh
 ```
 
-See [INSTALL.md](INSTALL.md) for detailed installation instructions.
+The installer will:
+- ✅ Configure Proxmox host for USB detection
+- ✅ Create and configure LXC container
+- ✅ Install all dependencies (Node.js, rsync, etc.)
+- ✅ Deploy dashboard application
+- ✅ Set up systemd services
+- ✅ Configure bind mounts for USB and NAS
+
+**Interactive Prompts:**
+- Container ID (default: 105)
+- Container name (default: media-ingest)
+- Root password for container
+- NAS mount path on host
+- CPU/Memory/Disk allocation
+- Network configuration (DHCP or static IP)
+
+### Manual Installation
+
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for step-by-step manual setup.
 
 ## 📖 Documentation
 
