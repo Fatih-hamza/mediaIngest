@@ -454,27 +454,22 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true
+    let eventSource = null
 
-    async function poll() {
+    // Initial data fetch
+    async function fetchInitialData() {
       try {
-        const [statusRes, historyRes, statsRes, storageRes] = await Promise.all([
-          fetch('/api/status'),
+        const [historyRes, statsRes, storageRes] = await Promise.all([
           fetch('/api/history'),
           fetch('/api/stats'),
           fetch('/api/storage')
         ])
         
-        const statusData = await statusRes.json()
         const historyData = await historyRes.json()
         const statsData = await statsRes.json()
         const storageData = await storageRes.json()
         
         if (!mounted) return
-        
-        if (statusData.ok) {
-          setActive(statusData.active)
-          setCurrent(statusData.current || { filename: null, progress: 0, speed: null, timeRemaining: null, size: null })
-        }
         
         if (historyData.ok) {
           setHistory(historyData.history || [])
@@ -488,16 +483,66 @@ export default function App() {
           setStorage(storageData.storage)
         }
       } catch (e) {
-        console.error('Polling error:', e)
+        console.error('Initial fetch error:', e)
       }
     }
 
-    poll()
-    const interval = setInterval(poll, 500) // Poll every 500ms for faster updates
+    // Setup Server-Sent Events for real-time updates
+    function setupSSE() {
+      eventSource = new EventSource('/api/stream')
+      
+      eventSource.onmessage = (event) => {
+        if (!mounted) return
+        
+        try {
+          const message = JSON.parse(event.data)
+          
+          if (message.type === 'status') {
+            const current = message.data || { filename: null, progress: 0, speed: null, timeRemaining: null, size: null }
+            setActive(current.filename !== null || current.progress > 0)
+            setCurrent(current)
+          } else if (message.type === 'update') {
+            // Refresh history and stats when new transfers complete
+            fetch('/api/history').then(r => r.json()).then(data => {
+              if (data.ok && mounted) setHistory(data.history || [])
+            })
+            fetch('/api/stats').then(r => r.json()).then(data => {
+              if (data.ok && mounted) setStats(data.stats)
+            })
+          }
+        } catch (e) {
+          console.error('SSE parse error:', e)
+        }
+      }
+      
+      eventSource.onerror = () => {
+        console.log('SSE connection lost, reconnecting...')
+        eventSource.close()
+        // Reconnect after 2 seconds
+        if (mounted) {
+          setTimeout(() => {
+            if (mounted) setupSSE()
+          }, 2000)
+        }
+      }
+    }
+
+    // Periodic refresh for storage stats (less frequent)
+    const storageInterval = setInterval(() => {
+      if (mounted) {
+        fetch('/api/storage').then(r => r.json()).then(data => {
+          if (data.ok && mounted) setStorage(data.storage)
+        }).catch(e => console.error('Storage fetch error:', e))
+      }
+    }, 5000) // Every 5 seconds
+
+    fetchInitialData()
+    setupSSE()
     
     return () => { 
       mounted = false
-      clearInterval(interval)
+      if (eventSource) eventSource.close()
+      clearInterval(storageInterval)
     }
   }, [])
 

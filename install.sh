@@ -535,7 +535,11 @@ sync_folder() {
         echo "Syncing $SRC_SUB -> $DST_PATH" >> "$LOG"
         echo "SYNC_START:$FOLDER_NAME" >> "$LOG"
 
-        stdbuf -oL rsync -rvh -W --inplace --progress --ignore-existing "$SRC_SUB/" "$DST_PATH/" 2>&1 | tr '\''\r'\'' '\''\n'\'' >> "$LOG"
+        # Use --info=progress2 for overall progress + --info=name0 for file names
+        # This gives us both file-by-file updates AND total transfer progress
+        stdbuf -oL rsync -rvh -W --inplace --info=progress2 --info=name0 --ignore-existing "$SRC_SUB/" "$DST_PATH/" 2>&1 | \
+            stdbuf -oL tr '\''\r'\'' '\''\n'\'' | \
+            stdbuf -oL grep -v '\''^$'\'' >> "$LOG"
 
         echo "SYNC_END:$FOLDER_NAME" >> "$LOG"
     else

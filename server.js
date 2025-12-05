@@ -282,6 +282,7 @@ function parseCurrentTransferFromMainLog(logLines) {
 // Watch log file and update history (only process new lines)
 let lastFileSize = 0;
 let lastPosition = 0;
+let sseClients = []; // Store SSE connections
 
 function watchLogFile() {
   setInterval(() => {
@@ -325,6 +326,9 @@ function watchLogFile() {
             }
             
             writeHistory(history);
+            
+            // Broadcast update to all SSE clients
+            broadcastSSE({ type: 'update', data: { completed } });
           }
           
           lastPosition = stats.size;
@@ -339,6 +343,13 @@ function watchLogFile() {
   }, 1000); // Check every 1 second for faster response
 }
 
+// Broadcast to all SSE clients
+function broadcastSSE(message) {
+  sseClients.forEach(client => {
+    client.write(`data: ${JSON.stringify(message)}\n\n`);
+  });
+}
+
 // API: Get current status
 app.get('/api/status', (req, res) => {
   // Use progress log for real-time updates
@@ -351,6 +362,35 @@ app.get('/api/status', (req, res) => {
   }
   
   res.json({ ok: true, active, current });
+});
+
+// API: Server-Sent Events for real-time updates
+app.get('/api/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+  
+  // Add this client to the list
+  sseClients.push(res);
+  
+  // Send current status immediately
+  const current = parseCurrentTransfer();
+  res.write(`data: ${JSON.stringify({ type: 'status', data: current })}\n\n`);
+  
+  // Send status updates every 500ms while connected
+  const intervalId = setInterval(() => {
+    const current = parseCurrentTransfer();
+    res.write(`data: ${JSON.stringify({ type: 'status', data: current })}\n\n`);
+  }, 500);
+  
+  // Remove client on disconnect
+  req.on('close', () => {
+    clearInterval(intervalId);
+    sseClients = sseClients.filter(client => client !== res);
+  });
 });
 
 // API: Get history
