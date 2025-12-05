@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { HardDrive, Activity, CheckCircle, Film, Tv, Database, Zap, XCircle, Server, Eject, Clapperboard } from 'lucide-react'
+import { HardDrive, Activity, CheckCircle, Film, Tv, Database, Zap, XCircle, Server, Power, Clapperboard } from 'lucide-react'
 
 function StatusBadge({ active }) {
   return (
@@ -185,7 +185,7 @@ function DeviceCard({ onAction }) {
               disabled={loading === 'Unmount'}
               className="bg-slate-950/50 hover:bg-slate-800/50 border border-slate-700 text-slate-300 font-medium py-2 px-3 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-sm touch-manipulation active:scale-95 disabled:opacity-50"
             >
-              <Eject className="w-4 h-4" />
+              <Power className="w-4 h-4" />
               <span>{loading === 'Unmount' ? '...' : 'Eject'}</span>
             </button>
 
