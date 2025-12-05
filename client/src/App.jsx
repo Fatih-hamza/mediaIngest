@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { HardDrive, Activity, CheckCircle, Film, Tv, Database, Zap } from 'lucide-react'
+import { HardDrive, Activity, CheckCircle, Film, Tv, Database, Zap, XCircle, Server } from 'lucide-react'
 
 function StatusBadge({ active }) {
   return (
@@ -23,8 +23,29 @@ function StatusBadge({ active }) {
   )
 }
 
-function HeroCard({ active, current }) {
+function HeroCard({ active, current, onAbort }) {
   const hasTransfer = active && current.filename
+  const [aborting, setAborting] = useState(false)
+
+  const handleAbort = async () => {
+    if (!confirm('Are you sure you want to abort the current sync?')) return
+    
+    setAborting(true)
+    try {
+      const res = await fetch('/api/abort', { method: 'POST' })
+      const data = await res.json()
+      
+      if (data.ok) {
+        onAbort('Sync cancelled successfully')
+      } else {
+        onAbort('Failed to abort sync', true)
+      }
+    } catch (e) {
+      onAbort('Network error', true)
+    } finally {
+      setAborting(false)
+    }
+  }
   
   return (
     <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 md:col-span-2 lg:col-span-2 order-1">
@@ -60,7 +81,7 @@ function HeroCard({ active, current }) {
           </div>
 
           {/* Stats Grid - Responsive */}
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
             <div className="bg-slate-950/50 rounded-lg p-3 sm:p-4 border border-slate-800/50">
               <div className="text-xs uppercase tracking-wide text-slate-600 mb-1">Speed</div>
               <div className="text-base sm:text-xl font-bold text-white truncate">{current.speed || '--'}</div>
@@ -74,6 +95,16 @@ function HeroCard({ active, current }) {
               <div className="text-base sm:text-xl font-bold text-white truncate">{current.timeRemaining || '--'}</div>
             </div>
           </div>
+
+          {/* Abort Button */}
+          <button
+            onClick={handleAbort}
+            disabled={aborting}
+            className="w-full bg-red-600/20 hover:bg-red-600/30 border-2 border-red-600 text-red-400 font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 touch-manipulation active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <XCircle className="w-5 h-5" />
+            <span>{aborting ? 'Aborting...' : 'ABORT SYNC'}</span>
+          </button>
         </div>
       ) : (
         <div className="text-center py-12 sm:py-16">
@@ -94,9 +125,89 @@ function HeroCard({ active, current }) {
   )
 }
 
+function StorageCard({ storage }) {
+  const nasPercent = storage.nas?.usedPercent || 0
+  const usbPercent = storage.usb?.usedPercent || 0
+  
+  const getNasColor = () => {
+    if (nasPercent > 90) return 'from-red-600 to-red-500'
+    return 'from-blue-600 to-blue-500'
+  }
+  
+  const getUsbColor = () => {
+    if (usbPercent > 90) return 'from-red-600 to-red-500'
+    return 'from-emerald-600 to-emerald-500'
+  }
+  
+  return (
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 order-3 md:order-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Storage Health
+        </h2>
+        <Server className="w-4 h-4 text-slate-700" />
+      </div>
+
+      <div className="space-y-5">
+        {/* NAS Storage */}
+        {storage.nas ? (
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs uppercase tracking-wide text-slate-500">NAS Space</span>
+              <span className={`text-sm font-bold ${nasPercent > 90 ? 'text-red-400' : 'text-blue-400'}`}>
+                {nasPercent}% Used
+              </span>
+            </div>
+            <div className="h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800 mb-2">
+              <motion.div
+                className={`h-full bg-gradient-to-r ${getNasColor()}`}
+                initial={{ width: 0 }}
+                animate={{ width: `${nasPercent}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>{storage.nas.used} used</span>
+              <span>{storage.nas.free} free</span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-4 text-slate-600 text-xs">
+            NAS not mounted
+          </div>
+        )}
+
+        {/* USB Storage - Hidden on mobile */}
+        {storage.usb && (
+          <div className="hidden sm:block">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs uppercase tracking-wide text-slate-500">USB Space</span>
+              <span className={`text-sm font-bold ${usbPercent > 90 ? 'text-red-400' : 'text-emerald-400'}`}>
+                {usbPercent}% Used
+              </span>
+            </div>
+            <div className="h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800 mb-2">
+              <motion.div
+                className={`h-full bg-gradient-to-r ${getUsbColor()}`}
+                initial={{ width: 0 }}
+                animate={{ width: `${usbPercent}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>{storage.usb.used} used</span>
+              <span>{storage.usb.free} free</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function DeviceCard() {
   return (
-    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 order-3">
+    <div className="bg-slate-900/50 backdrop-blur border border-slate-800 rounded-xl p-5 sm:p-6 order-4 md:order-3">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           USB Device
@@ -282,21 +393,30 @@ export default function App() {
   const [current, setCurrent] = useState({ filename: null, progress: 0, speed: null, timeRemaining: null, size: null })
   const [history, setHistory] = useState([])
   const [stats, setStats] = useState({ totalFiles: 0, totalGB: '0.00', lastActive: null })
+  const [storage, setStorage] = useState({ nas: null, usb: null })
+  const [toast, setToast] = useState(null)
+
+  const showToast = (message, isError = false) => {
+    setToast({ message, isError })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   useEffect(() => {
     let mounted = true
 
     async function poll() {
       try {
-        const [statusRes, historyRes, statsRes] = await Promise.all([
+        const [statusRes, historyRes, statsRes, storageRes] = await Promise.all([
           fetch('/api/status'),
           fetch('/api/history'),
-          fetch('/api/stats')
+          fetch('/api/stats'),
+          fetch('/api/storage')
         ])
         
         const statusData = await statusRes.json()
         const historyData = await historyRes.json()
         const statsData = await statsRes.json()
+        const storageData = await storageRes.json()
         
         if (!mounted) return
         
@@ -311,6 +431,10 @@ export default function App() {
         
         if (statsData.ok) {
           setStats(statsData.stats)
+        }
+        
+        if (storageData.ok) {
+          setStorage(storageData.storage)
         }
       } catch (e) {
         console.error('Polling error:', e)
@@ -329,6 +453,29 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Toast Notification */}
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-lg border-2 shadow-xl backdrop-blur ${
+              toast.isError 
+                ? 'bg-red-900/90 border-red-600 text-red-200' 
+                : 'bg-emerald-900/90 border-emerald-600 text-emerald-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {toast.isError ? (
+                <XCircle className="w-5 h-5" />
+              ) : (
+                <CheckCircle className="w-5 h-5" />
+              )}
+              <span className="font-medium">{toast.message}</span>
+            </div>
+          </motion.div>
+        )}
+
         {/* Header - Responsive */}
         <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
           <div className="flex items-center gap-3">
@@ -347,12 +494,15 @@ export default function App() {
         {/* Mobile: 1 column, Tablet: 2 columns, Desktop: 3 columns (with spans) */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {/* Hero Card - Always appears first on mobile, spans 2 cols on tablet/desktop */}
-          <HeroCard active={active} current={current} />
+          <HeroCard active={active} current={current} onAbort={showToast} />
 
           {/* Stats Card - Second on mobile */}
           <StatsCard stats={stats} />
 
-          {/* Device Card - Third on mobile */}
+          {/* Storage Card - Third on mobile */}
+          <StorageCard storage={storage} />
+
+          {/* Device Card - Fourth on mobile */}
           <DeviceCard />
 
           {/* History Card - Last on mobile, spans full width */}

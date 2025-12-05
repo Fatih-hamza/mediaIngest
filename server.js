@@ -249,6 +249,61 @@ app.get('/api/active', (req, res) => {
   });
 });
 
+// Abort rsync transfer
+app.post('/api/abort', (req, res) => {
+  exec('pkill rsync', (err) => {
+    if (err) {
+      return res.json({ ok: false, error: 'Failed to abort sync' });
+    }
+    res.json({ ok: true, message: 'Sync aborted successfully' });
+  });
+});
+
+// Get storage stats
+app.get('/api/storage', (req, res) => {
+  exec('df -h', (err, stdout) => {
+    if (err) {
+      return res.json({ ok: false, error: 'Failed to get storage info' });
+    }
+    
+    const lines = stdout.split('\n');
+    let nasStats = null;
+    let usbStats = null;
+    
+    lines.forEach(line => {
+      // Match NAS mount point
+      if (line.includes('/media/nas')) {
+        const parts = line.split(/\s+/);
+        nasStats = {
+          total: parts[1],
+          used: parts[2],
+          free: parts[3],
+          usedPercent: parseInt(parts[4]) || 0
+        };
+      }
+      
+      // Match USB mount point
+      if (line.includes('/media/usb-ingest')) {
+        const parts = line.split(/\s+/);
+        usbStats = {
+          total: parts[1],
+          used: parts[2],
+          free: parts[3],
+          usedPercent: parseInt(parts[4]) || 0
+        };
+      }
+    });
+    
+    res.json({ 
+      ok: true, 
+      storage: {
+        nas: nasStats,
+        usb: usbStats
+      }
+    });
+  });
+});
+
 // Serve static files from client/dist
 const clientDist = path.join(__dirname, 'client', 'dist');
 if (fs.existsSync(clientDist)) {
