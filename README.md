@@ -7,6 +7,25 @@
 
 A complete automated USB media ingest station for Proxmox VE. Automatically detects USB drives, scans for media folders, and syncs Movies/Series/Anime to your NAS with real-time web dashboard monitoring.
 
+## 💡 The Story Behind This Project
+
+This application was born out of a practical need to streamline media management for a **Jellyfin** media server running on Proxmox. Managing physical USB drives containing media content became tedious—manually mounting drives, organizing files, and tracking sync progress was time-consuming and error-prone.
+
+The solution? An automated, intelligent system that handles everything from USB detection to organized syncing, complete with a beautiful real-time dashboard.
+
+**While designed primarily for Jellyfin**, this system is **universally compatible** with any self-hosted streaming platform:
+
+- **Jellyfin** - Complete media freedom
+- **Plex** - Organized media streaming
+- **Emby** - Personal media server
+- **Kodi** - Home theater software
+- **Subsonic/Airsonic** - Music streaming
+- **Navidrome** - Music server
+- **Photoprism** - Photo management
+- **Any custom solution** - It's just organized file syncing!
+
+The system doesn't care about the destination—it simply ensures your media reaches the right place, properly organized, with full visibility into the process. Whether you're running a home lab, a family media server, or a small-scale media distribution setup, this tool eliminates the manual overhead.
+
 ---
 
 ## 🎯 Features
