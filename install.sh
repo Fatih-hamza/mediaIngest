@@ -25,6 +25,7 @@ YW='\033[1;33m'  # Yellow
 MG='\033[35m'    # Magenta
 CY='\033[96m'    # Cyan
 BFR="\\r\\033[K" # Back to First column and Clear Line
+HOLD="-"
 CM="${GN}✓${CL}"
 CROSS="${RD}✗${CL}"
 
@@ -98,6 +99,82 @@ check_proxmox() {
         exit 1
     fi
     msg_ok "Proxmox VE detected"
+}
+
+################################################################################
+# Destination Selection
+################################################################################
+select_nas_destination() {
+    echo -e "\n${BL}═══════════════════════════════════════════════════════════════${CL}"
+    echo -e "${BL}           Scanning for NAS/Storage Destinations...             ${CL}"
+    echo -e "${BL}═══════════════════════════════════════════════════════════════${CL}\n"
+    
+    # Find all mounted storage locations
+    local destinations=()
+    
+    # Scan /mnt/pve/*
+    if [ -d /mnt/pve ]; then
+        while IFS= read -r dir; do
+            if mountpoint -q "$dir" 2>/dev/null || [ -d "$dir" ]; then
+                destinations+=("$dir")
+            fi
+        done < <(find /mnt/pve -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
+    fi
+    
+    # Scan /mnt/* (exclude /mnt/pve and /mnt/usb-pass)
+    while IFS= read -r dir; do
+        if [ "$dir" != "/mnt/pve" ] && [ "$dir" != "/mnt/usb-pass" ]; then
+            if mountpoint -q "$dir" 2>/dev/null || [ -d "$dir" ]; then
+                destinations+=("$dir")
+            fi
+        fi
+    done < <(find /mnt -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort)
+    
+    if [ ${#destinations[@]} -eq 0 ]; then
+        msg_error "No NAS/storage destinations found in /mnt/pve or /mnt"
+        echo -e "\n${YW}Please ensure your NAS is mounted first.${CL}"
+        echo -e "${YW}Using default: /mnt/pve/media-nas${CL}\n"
+        NAS_HOST_PATH="/mnt/pve/media-nas"
+        return
+    fi
+    
+    # Display menu
+    echo -e "${GN}Available Storage Destinations:${CL}\n"
+    for i in "${!destinations[@]}"; do
+        local path="${destinations[$i]}"
+        local size=$(df -h "$path" 2>/dev/null | awk 'NR==2 {print $2}' || echo "N/A")
+        local used=$(df -h "$path" 2>/dev/null | awk 'NR==2 {print $3}' || echo "N/A")
+        local avail=$(df -h "$path" 2>/dev/null | awk 'NR==2 {print $4}' || echo "N/A")
+        printf "${CY}%2d)${CL} %-40s ${MG}Size:${CL} %-8s ${YW}Used:${CL} %-8s ${GN}Avail:${CL} %s\n" \
+               "$((i+1))" "$path" "$size" "$used" "$avail"
+    done
+    
+    echo ""
+    while true; do
+        read -p "$(echo -e ${GN}Select destination [1-${#destinations[@]}]:${CL} )" choice
+        
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#destinations[@]}" ]; then
+            NAS_HOST_PATH="${destinations[$((choice-1))]}"
+            break
+        else
+            echo -e "${RD}Invalid choice. Please enter a number between 1 and ${#destinations[@]}${CL}"
+        fi
+    done
+    
+    msg_ok "Selected: $NAS_HOST_PATH"
+    
+    # Check if Media folder exists, create if not
+    msg_info "Checking for Media folder"
+    local media_path="$NAS_HOST_PATH/Media"
+    
+    if [ ! -d "$media_path" ]; then
+        mkdir -p "$media_path"
+        chmod 777 "$media_path"
+        msg_ok "Created Media folder: $media_path"
+    else
+        chmod 777 "$media_path"
+        msg_ok "Media folder exists: $media_path"
+    fi
 }
 
 ################################################################################
@@ -186,18 +263,6 @@ ensure_template() {
         echo "pveam download local <template-name>"
         echo ""
         exit 1
-    fi
-}
-
-prepare_nas_path() {
-    msg_info "Checking NAS mount path"
-    
-    if [ -d "$NAS_HOST_PATH" ]; then
-        msg_ok "NAS path exists: $NAS_HOST_PATH"
-    else
-        msg_warn "NAS path not found, creating placeholder"
-        mkdir -p "$NAS_HOST_PATH"
-        msg_ok "Created: $NAS_HOST_PATH"
     fi
 }
 
@@ -546,7 +611,7 @@ show_summary() {
 main() {
     header_info
     echo -e "\n${GN}═══════════════════════════════════════════════════════════════${CL}"
-    echo -e "${GN}        Zero-Touch Installation - No User Input Required        ${CL}"
+    echo -e "${GN}          Select Your NAS Destination (One-Time Setup)         ${CL}"
     echo -e "${GN}═══════════════════════════════════════════════════════════════${CL}\n"
     sleep 2
     
@@ -554,11 +619,16 @@ main() {
     check_root
     check_proxmox
     
+    # NAS Destination Selection (ONLY user interaction)
+    select_nas_destination
+    
+    echo -e "\n${GN}Starting automated installation...${CL}\n"
+    sleep 2
+    
     # Auto-Detection
     get_next_ctid
     detect_storage
     ensure_template
-    prepare_nas_path
     
     # Phase 1: Host Setup
     setup_host_scripts
