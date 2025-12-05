@@ -142,11 +142,11 @@ function parseCurrentTransfer() {
       speed = progressMatch[3];
       timeRemaining = progressMatch[4];
       
-      // Look backwards for filename
-      for (let j = i - 1; j >= Math.max(0, i - 10); j--) {
+      // Look backwards for filename (expanded search range)
+      for (let j = i - 1; j >= Math.max(0, i - 30); j--) {
         const prevLine = progressLines[j].trim();
         
-        if (prevLine && prevLine.match(/\.(mp4|mkv|avi|mov|m4v|webm|flv|wmv|mpg|mpeg|m2ts)$/i)) {
+        if (prevLine && prevLine.match(/\.(mp4|mkv|avi|mov|m4v|webm|flv|wmv|mpg|mpeg|m2ts|srt|ass|sub)$/i)) {
           currentFilename = prevLine.replace(/^.*\//, '');
           break;
         }
@@ -156,11 +156,22 @@ function parseCurrentTransfer() {
     }
   }
   
+  // If we have progress but no filename, search more broadly
+  if (inActiveSync && !currentFilename && progress > 0) {
+    for (let i = progressLines.length - 1; i >= Math.max(0, progressLines.length - 100); i--) {
+      const line = progressLines[i].trim();
+      if (line && line.match(/\.(mp4|mkv|avi|mov|m4v|webm|flv|wmv|mpg|mpeg|m2ts|srt|ass|sub)$/i)) {
+        currentFilename = line.replace(/^.*\//, '');
+        break;
+      }
+    }
+  }
+  
   // If we're in active sync but found no progress, look for most recent filename
   if (inActiveSync && !currentFilename && progress === 0) {
     for (let i = progressLines.length - 1; i >= Math.max(0, progressLines.length - 50); i--) {
       const line = progressLines[i].trim();
-      if (line && line.match(/\.(mp4|mkv|avi|mov|m4v|webm|flv|wmv|mpg|mpeg|m2ts)$/i)) {
+      if (line && line.match(/\.(mp4|mkv|avi|mov|m4v|webm|flv|wmv|mpg|mpeg|m2ts|srt|ass|sub)$/i)) {
         currentFilename = line.replace(/^.*\//, '');
         break;
       }
