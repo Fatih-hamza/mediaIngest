@@ -42,7 +42,67 @@ function parseNewCompletedTransfers(newLines) {
   for (let i = 0; i < newLines.length; i++) {
     const line = newLines[i].trim();
     
-    // Match 100% completion line: "1.77G 100%   58.48MB/s    0:00:28 (xfr#2, to-chk=0/13)"
+    // Match rsync summary line: "sent 16.62G bytes  received 739 bytes  47.56M bytes/sec"
+    const summaryMatch = line.match(/sent ([\d.]+[KMGT]?) bytes.*?([\d.]+[KMGT]?)\s?bytes\/sec/);
+    if (summaryMatch) {
+      // Look backwards for all transferred video files in this session
+      let syncFolder = 'Media';
+      
+      // Find which folder was being synced
+      for (let j = i - 1; j >= Math.max(0, i - 200); j--) {
+        const syncStart = newLines[j].match(/SYNC_START:(\w+)/);
+        if (syncStart) {
+          syncFolder = syncStart[1];
+          break;
+        }
+      }
+      
+      // Find all video files that were transferred (had 100% or xfr# markers)
+      const transferredFiles = [];
+      for (let j = i - 1; j >= Math.max(0, i - 500); j--) {
+        const prevLine = newLines[j].trim();
+        
+        // Match video files that show progress
+        if (prevLine.match(/\.(mp4|mkv|avi|mov|m4v|webm|flv|wmv|mpg|mpeg|m2ts)$/i)) {
+          // Check if this file had transfer activity (next few lines show progress)
+          let hadActivity = false;
+          for (let k = j + 1; k <= Math.min(newLines.length - 1, j + 5); k++) {
+            if (newLines[k].match(/\d+%/) || newLines[k].match(/xfr#/)) {
+              hadActivity = true;
+              break;
+            }
+          }
+          
+          if (hadActivity) {
+            const filename = prevLine.replace(/^.*\//, '');
+            if (!transferredFiles.some(f => f === filename)) {
+              transferredFiles.push(filename);
+            }
+          }
+        }
+      }
+      
+      // Add all transferred files to history
+      const avgSpeed = summaryMatch[2];
+      transferredFiles.forEach(filename => {
+        let type = 'Movie';
+        if (filename.match(/S\d{2}E\d{2}|Season|Episode/i)) {
+          type = 'Series';
+        }
+        
+        completed.push({
+          filename,
+          size: summaryMatch[1],
+          speed: avgSpeed + '/s',
+          type,
+          timestamp: Date.now()
+        });
+      });
+      
+      continue;
+    }
+    
+    // Also match individual 100% completion lines for real-time tracking
     const completionMatch = line.match(/([\d.]+[KMGT]?)\s+100%\s+([\d.]+[KMGT]?B\/s)\s+(\d+:\d+:\d+)/);
     
     if (completionMatch) {
