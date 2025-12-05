@@ -329,7 +329,12 @@ function watchLogFile() {
 app.get('/api/status', (req, res) => {
   // Use progress log for real-time updates
   const current = parseCurrentTransfer();
-  const active = current.filename !== null;
+  const active = current.filename !== null || current.progress > 0;
+  
+  // Debug logging when active
+  if (active && process.env.DEBUG) {
+    console.log(`[DEBUG] Active transfer: ${current.filename} - ${current.progress}% - ${current.speed}`);
+  }
   
   res.json({ ok: true, active, current });
 });
