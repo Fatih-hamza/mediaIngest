@@ -347,7 +347,9 @@ EOFSCRIPT
     # Create the correct udev rule
     cat > /etc/udev/rules.d/99-usb-ingest.rules << 'EOF'
 # USB Media Ingest - Trigger on USB storage device insertion
-ACTION=="add", KERNEL=="sd[a-z]", SUBSYSTEM=="block", RUN+="/usr/local/bin/usb-trigger.sh %k"
+# Triggers on both disk devices (sdb) and partitions (sdb1)
+ACTION=="add", KERNEL=="sd[a-z]", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", RUN+="/usr/local/bin/usb-trigger.sh %k"
+ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEM=="block", ENV{DEVTYPE}=="partition", ENV{ID_FS_USAGE}=="filesystem", RUN+="/usr/local/bin/usb-trigger.sh %k"
 EOF
     
     # Reload and verify udev rules
