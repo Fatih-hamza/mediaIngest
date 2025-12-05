@@ -18,7 +18,7 @@ A modern, real-time monitoring dashboard for automated USB-to-NAS media transfer
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Proxmox Host (192.168.1.200)             │
+│                    Proxmox Host (YOUR_PROXMOX_IP)           │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  USB Drive Detection (udev rules)                     │  │
 │  │  └─→ /usr/local/bin/usb-trigger.sh                   │  │
@@ -27,7 +27,7 @@ A modern, real-time monitoring dashboard for automated USB-to-NAS media transfer
 │  └──────────────────────────────────────────────────────┘  │
 │                           ↓                                  │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │         LXC Container 105 (192.168.1.7)              │  │
+│  │         LXC Container 105 (YOUR_LXC_IP)              │  │
 │  │  ┌────────────────────────────────────────────────┐  │  │
 │  │  │  /usr/local/bin/ingest-media.sh                │  │  │
 │  │  │  └─→ Rsync files from USB to NAS              │  │  │
@@ -70,8 +70,8 @@ A modern, real-time monitoring dashboard for automated USB-to-NAS media transfer
 - NAS or network storage mounted on LXC container
 
 ### Network Configuration
-- Proxmox host: `192.168.1.200` (adjust as needed)
-- LXC container: `192.168.1.7` (adjust as needed)
+- Proxmox host: `YOUR_PROXMOX_IP` (e.g., YOUR_GATEWAY_IP00)
+- LXC container: `YOUR_LXC_IP` (e.g., YOUR_GATEWAY_IP01)
 - Firewall: Allow port 3000 for dashboard access
 
 ### Software Requirements
@@ -89,7 +89,7 @@ A modern, real-time monitoring dashboard for automated USB-to-NAS media transfer
 SSH into your Proxmox host and create the USB detection script:
 
 ```bash
-ssh root@192.168.1.200
+ssh root@YOUR_PROXMOX_IP
 
 cat > /usr/local/bin/usb-trigger.sh << 'EOF'
 #!/bin/bash
@@ -194,7 +194,7 @@ In the Proxmox web UI:
 1. Create a new LXC container (ID: 105 or your choice)
 2. Template: Debian 12 or Ubuntu 22.04
 3. Resources: 2GB RAM, 2 CPU cores minimum
-4. Network: Static IP `192.168.1.7` (or your choice)
+4. Network: Static IP `YOUR_LXC_IP` (e.g., YOUR_GATEWAY_IP01)
 5. **Important:** Enable "Nesting" and "FUSE" in container options
 
 Or via CLI:
@@ -204,7 +204,7 @@ pct create 105 local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst \
   --hostname ingestsync \
   --memory 2048 \
   --cores 2 \
-  --net0 name=eth0,bridge=vmbr0,ip=192.168.1.7/24,gw=192.168.1.1 \
+  --net0 name=eth0,bridge=vmbr0,ip=YOUR_LXC_IP/24,gw=YOUR_GATEWAY_IP \
   --features nesting=1,fuse=1 \
   --unprivileged 1
 ```
@@ -255,7 +255,7 @@ pct start 105
 ```bash
 pct enter 105
 # or
-ssh root@192.168.1.7
+ssh root@YOUR_LXC_IP
 ```
 
 ### Step 2: Install Dependencies
@@ -883,7 +883,7 @@ systemctl restart mediaingest-dashboard.service
 
 ```bash
 # On Proxmox host
-ssh root@192.168.1.200
+ssh root@YOUR_PROXMOX_IP
 
 # Manually trigger the script with your USB device
 bash /usr/local/bin/usb-trigger.sh /dev/sdb
@@ -896,7 +896,7 @@ tail -f /var/log/syslog | grep media-ingest
 
 ```bash
 # SSH into LXC
-ssh root@192.168.1.7
+ssh root@YOUR_LXC_IP
 
 # Manually run ingest script (ensure USB is mounted first)
 bash /usr/local/bin/ingest-media.sh
@@ -922,7 +922,7 @@ curl http://localhost:3000/api/storage | jq
 
 Open your browser and navigate to:
 ```
-http://192.168.1.7:3000
+http://YOUR_LXC_IP:3000
 ```
 
 You should see:
@@ -1233,7 +1233,7 @@ EOF
 
 1. **Firewall**: Only expose port 3000 to trusted networks
 ```bash
-ufw allow from 192.168.1.0/24 to any port 3000
+ufw allow from YOUR_NETWORK/24 to any port 3000
 ```
 
 2. **Authentication**: Add basic auth to Nginx reverse proxy

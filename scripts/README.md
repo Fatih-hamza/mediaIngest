@@ -12,9 +12,9 @@ This directory contains the core automation scripts for the Media Ingest System.
 
 **Installation:**
 ```bash
-# On Proxmox host (192.168.1.200)
-scp scripts/usb-trigger.sh root@192.168.1.200:/usr/local/bin/
-ssh root@192.168.1.200 "chmod +x /usr/local/bin/usb-trigger.sh"
+# On Proxmox host (YOUR_PROXMOX_IP)
+scp scripts/usb-trigger.sh root@YOUR_PROXMOX_IP:/usr/local/bin/
+ssh root@YOUR_PROXMOX_IP "chmod +x /usr/local/bin/usb-trigger.sh"
 ```
 
 **Configuration:**
@@ -36,9 +36,9 @@ ssh root@192.168.1.200 "chmod +x /usr/local/bin/usb-trigger.sh"
 
 **Installation:**
 ```bash
-# On LXC container (192.168.1.7)
-scp scripts/ingest-media.sh root@192.168.1.7:/usr/local/bin/
-ssh root@192.168.1.7 "chmod +x /usr/local/bin/ingest-media.sh"
+# On LXC container (YOUR_LXC_IP)
+scp scripts/ingest-media.sh root@YOUR_LXC_IP:/usr/local/bin/
+ssh root@YOUR_LXC_IP "chmod +x /usr/local/bin/ingest-media.sh"
 ```
 
 **Configuration:**
@@ -100,7 +100,7 @@ usb-trigger.sh cleanup
 ### Test USB Trigger Script (Proxmox)
 
 ```bash
-ssh root@192.168.1.200
+ssh root@YOUR_PROXMOX_IP
 
 # Manually trigger with USB device
 bash /usr/local/bin/usb-trigger.sh /dev/sdb
@@ -115,7 +115,7 @@ pct exec 105 -- mount | grep usb-ingest
 ### Test Ingest Script (LXC)
 
 ```bash
-ssh root@192.168.1.7
+ssh root@YOUR_LXC_IP
 
 # Ensure USB is mounted
 ls -la /media/usb-ingest
@@ -294,10 +294,10 @@ Thu Dec  5 14:24:12 UTC 2025: Ingest Complete.
 
 ```bash
 # On Proxmox
-ssh root@192.168.1.200 "md5sum /usr/local/bin/usb-trigger.sh"
+ssh root@YOUR_PROXMOX_IP "md5sum /usr/local/bin/usb-trigger.sh"
 
 # On LXC
-ssh root@192.168.1.7 "md5sum /usr/local/bin/ingest-media.sh"
+ssh root@YOUR_LXC_IP "md5sum /usr/local/bin/ingest-media.sh"
 ```
 
 ### Update Scripts
@@ -307,20 +307,20 @@ ssh root@192.168.1.7 "md5sum /usr/local/bin/ingest-media.sh"
 cd /home/spooky/Desktop/copyMontior
 
 # Deploy to Proxmox
-scp scripts/usb-trigger.sh root@192.168.1.200:/usr/local/bin/
+scp scripts/usb-trigger.sh root@YOUR_PROXMOX_IP:/usr/local/bin/
 
 # Deploy to LXC
-scp scripts/ingest-media.sh root@192.168.1.7:/usr/local/bin/
+scp scripts/ingest-media.sh root@YOUR_LXC_IP:/usr/local/bin/
 
 # Verify permissions
-ssh root@192.168.1.200 "chmod +x /usr/local/bin/usb-trigger.sh"
-ssh root@192.168.1.7 "chmod +x /usr/local/bin/ingest-media.sh"
+ssh root@YOUR_PROXMOX_IP "chmod +x /usr/local/bin/usb-trigger.sh"
+ssh root@YOUR_LXC_IP "chmod +x /usr/local/bin/ingest-media.sh"
 ```
 
 ### Backup Scripts
 
 ```bash
 # Backup from servers
-scp root@192.168.1.200:/usr/local/bin/usb-trigger.sh ./backups/usb-trigger.sh.$(date +%Y%m%d)
-scp root@192.168.1.7:/usr/local/bin/ingest-media.sh ./backups/ingest-media.sh.$(date +%Y%m%d)
+scp root@YOUR_PROXMOX_IP:/usr/local/bin/usb-trigger.sh ./backups/usb-trigger.sh.$(date +%Y%m%d)
+scp root@YOUR_LXC_IP:/usr/local/bin/ingest-media.sh ./backups/ingest-media.sh.$(date +%Y%m%d)
 ```
