@@ -324,17 +324,32 @@ sleep 2
 # Create mount point if needed
 mkdir -p "$HOST_MOUNT"
 
-# Security: Verify mount point is empty (prevent mounting over existing data)
+# Check if already mounted - verify accessibility
+if mountpoint -q "$HOST_MOUNT"; then
+    # Test if mount is stale (I/O error means device is gone)
+    if ! timeout 2 ls "$HOST_MOUNT" >/dev/null 2>&1; then
+        echo "$(date): Stale mount detected, force unmounting..." >> /var/log/usb-trigger.log
+        umount -f "$HOST_MOUNT" 2>/dev/null || true
+        sleep 1
+    else
+        echo "$(date): Already mounted and accessible, running ingest..." >> /var/log/usb-trigger.log
+        pct exec $LXC_ID -- /usr/local/bin/ingest-media.sh
+        echo "$(date): Ingest complete. Drive remains mounted." >> /var/log/usb-trigger.log
+        flock -u 200 2>/dev/null || true
+        exit 0
+    fi
+fi
+
+# Verify mount point is empty
 if [ -n "$(ls -A $HOST_MOUNT 2>/dev/null)" ]; then
-    echo "$(date): ERROR - Mount point not empty, possible stale mount" >> /var/log/usb-trigger.log
-    # Try to clean up
+    echo "$(date): ERROR - Mount point not empty, cleaning up..." >> /var/log/usb-trigger.log
     umount -f "$HOST_MOUNT" 2>/dev/null || true
     sleep 1
 fi
 
 # Check if device exists and is readable
 if [ ! -b "$DEVICE" ]; then
-    echo "$(date): ERROR - Device $DEVICE does not exist or is not a block device" >> /var/log/usb-trigger.log
+    echo "$(date): ERROR - Device $DEVICE does not exist" >> /var/log/usb-trigger.log
     exit 1
 fi
 
@@ -348,8 +363,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # Verify Mount
-if ! mount | grep -q "$HOST_MOUNT"; then
-    echo "$(date): ERROR - Failed to mount $DEVICE (check filesystem type and errors above)" >> /var/log/usb-trigger.log
+if ! mountpoint -q "$HOST_MOUNT"; then
+    echo "$(date): ERROR - Failed to mount $DEVICE" >> /var/log/usb-trigger.log
     exit 1
 fi
 
@@ -358,16 +373,11 @@ echo "$(date): Mounted successfully. Triggering LXC ingest..." >> /var/log/usb-t
 # Execute ingest script inside LXC
 pct exec $LXC_ID -- /usr/local/bin/ingest-media.sh
 
-# Cleanup
-echo "$(date): Ingest finished. Cleaning up..." >> /var/log/usb-trigger.log
-sync
-sleep 2
-umount "$HOST_MOUNT" 2>/dev/null
+# Keep mounted for user to manually eject
+echo "$(date): Ingest finished. Drive remains mounted for manual ejection." >> /var/log/usb-trigger.log
 
 # Release lock (automatic on script exit, but explicit for clarity)
 flock -u 200 2>/dev/null || true
-
-echo "$(date): Complete. Drive unmounted." >> /var/log/usb-trigger.log
 EOFSCRIPT
     
     chmod +x /usr/local/bin/usb-trigger.sh
