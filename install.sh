@@ -589,7 +589,7 @@ set -euo pipefail
 # ===================================================================
 LOG="/var/log/ingest-media.log"
 INGEST_STATUS="/run/ingest/status.json"
-NETWORK_DIR="/mnt/network-storage"
+NETWORK_DIR="/media/nas"
 
 # ===================================================================
 # Functions
@@ -696,7 +696,7 @@ create_status "idle" "Waiting for USB device" 0 ""
 
 # Wait for USB device
 while true; do
-    USB_DEVICE=$(lsblk -nlo NAME,TYPE,MOUNTPOINT | awk '$2 == "part" && $3 != "" && $3 ~ /^\/media/ {print $3; exit}')
+    USB_DEVICE=$(lsblk -nlo NAME,TYPE,MOUNTPOINT | awk '($2 == "part" || $2 == "disk") && $3 != "" && $3 ~ /^\/media/ {print $3; exit}')
     
     if [ -n "$USB_DEVICE" ]; then
         USB_PATH="$USB_DEVICE"
