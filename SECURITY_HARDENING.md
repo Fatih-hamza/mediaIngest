@@ -124,7 +124,8 @@ sed -i 's/mount -t ntfs3 -o noatime/mount -t ntfs3 -o noatime,nodev,nosuid,noexe
 
 ### 3. USB-Borne Malware Injection
 
-**Risk Level**: High (CVSS 8.1)
+**Risk Level**: High (CVSS 8.1)  
+**Status**: ✅ **IMPLEMENTED** (ClamAV scanning, filename validation, disk space checks)
 
 **Description**: Auto-mounting USB drives from untrusted sources could introduce malware. While Linux is less vulnerable to Windows autorun exploits, risks still exist.
 
@@ -180,7 +181,7 @@ fi
 EOF
 ```
 
-**Status**: ⏳ Pending Implementation
+**Status**: ✅ **IMPLEMENTED** (ClamAV installed with auto-updates, recursive malware scanning, filename validation, disk space checks)
 
 ---
 

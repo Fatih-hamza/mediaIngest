@@ -588,6 +588,17 @@ bootstrap_container() {
     pct exec $CTID -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl git rsync ntfs-3g python3 sudo" >/dev/null 2>&1
     msg_ok "Base dependencies installed"
     
+    msg_info "Installing ClamAV antivirus"
+    pct exec $CTID -- bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq clamav clamav-daemon clamav-freshclam" >/dev/null 2>&1
+    msg_ok "ClamAV installed"
+    
+    msg_info "Updating virus definitions (this may take a few minutes)"
+    pct exec $CTID -- bash -c "systemctl stop clamav-freshclam 2>/dev/null || true"
+    pct exec $CTID -- bash -c "freshclam --quiet 2>/dev/null || true"
+    pct exec $CTID -- bash -c "systemctl enable clamav-daemon --quiet 2>/dev/null || true"
+    pct exec $CTID -- bash -c "systemctl start clamav-daemon 2>/dev/null || true"
+    msg_ok "Virus definitions updated"
+    
     msg_info "Installing Node.js 18.x"
     pct exec $CTID -- bash -c "curl -fsSL https://deb.nodesource.com/setup_18.x | bash - >/dev/null 2>&1"
     pct exec $CTID -- bash -c "apt-get install -y -qq nodejs" >/dev/null 2>&1
@@ -622,6 +633,57 @@ if [ -z "$FOUND_SRC" ]; then
 fi
 
 echo "Target Found: $FOUND_SRC" >> "$LOG"
+
+# Security: Check for suspicious filenames before processing
+echo "$(date): Checking for suspicious filenames..." >> "$LOG"
+SUSPICIOUS_COUNT=0
+while IFS= read -r -d "" file; do
+    filename=$(basename "$file")
+    # Check for shell metacharacters and dangerous patterns
+    if echo "$filename" | grep -qE '[\$\`\;\|\&\<\>\(\)]|^\.|\.\.'; then
+        echo "WARNING: Suspicious filename detected: $filename" >> "$LOG"
+        SUSPICIOUS_COUNT=$((SUSPICIOUS_COUNT + 1))
+    fi
+done < <(find "$FOUND_SRC" -type f -print0 2>/dev/null)
+
+if [ "$SUSPICIOUS_COUNT" -gt 0 ]; then
+    echo "SECURITY ALERT: Found $SUSPICIOUS_COUNT suspicious filenames. Review log before proceeding." >> "$LOG"
+fi
+
+# Security: Scan for malware using ClamAV
+echo "$(date): Scanning USB content for malware (this may take a few minutes)..." >> "$LOG"
+if command -v clamscan >/dev/null 2>&1; then
+    SCAN_OUTPUT=$(clamscan --recursive --infected --max-filesize=500M --max-scansize=1000M "$FOUND_SRC" 2>&1)
+    SCAN_EXIT=$?
+    
+    if [ $SCAN_EXIT -eq 0 ]; then
+        echo "$(date): Malware scan complete - No threats detected" >> "$LOG"
+    elif [ $SCAN_EXIT -eq 1 ]; then
+        echo "$(date): SECURITY ALERT - MALWARE DETECTED! Aborting sync." >> "$LOG"
+        echo "$SCAN_OUTPUT" >> "$LOG"
+        exit 1
+    else
+        echo "$(date): WARNING - Malware scan encountered errors but continuing" >> "$LOG"
+        echo "$SCAN_OUTPUT" >> "$LOG"
+    fi
+else
+    echo "$(date): WARNING - ClamAV not available, skipping malware scan" >> "$LOG"
+fi
+
+# Security: Check available disk space before sync
+USB_SIZE=$(du -sb "$FOUND_SRC" 2>/dev/null | cut -f1)
+NAS_FREE=$(df -B1 "$DEST_ROOT" 2>/dev/null | tail -1 | awk '\''{print $4}'\'')
+
+if [ -n "$USB_SIZE" ] && [ -n "$NAS_FREE" ]; then
+    # Add 10% buffer for safety
+    REQUIRED_SPACE=$((USB_SIZE + USB_SIZE / 10))
+    if [ "$REQUIRED_SPACE" -gt "$NAS_FREE" ]; then
+        echo "$(date): ERROR - Insufficient disk space on NAS" >> "$LOG"
+        echo "Required: $(numfmt --to=iec "$REQUIRED_SPACE") | Available: $(numfmt --to=iec "$NAS_FREE")" >> "$LOG"
+        exit 1
+    fi
+    echo "$(date): Disk space check passed - USB: $(numfmt --to=iec "$USB_SIZE") | NAS Free: $(numfmt --to=iec "$NAS_FREE")" >> "$LOG"
+fi
 
 # Check if NAS already has Anime, Movies, and Series folders at root level
 # If all three exist, use NAS root directly (no Media parent folder needed)
