@@ -500,6 +500,90 @@ app.get('/api/status', (req, res) => {
   res.json({ ok: true, active, current });
 });
 
+// API: Version check endpoint
+app.get('/api/version', async (req, res) => {
+  try {
+    // Read local version
+    const versionPath = path.join(__dirname, 'version.json');
+    let localVersion = { version: 'unknown', releaseDate: 'unknown' };
+    
+    if (fs.existsSync(versionPath)) {
+      localVersion = JSON.parse(fs.readFileSync(versionPath, 'utf8'));
+    }
+    
+    // Try to fetch latest version from GitHub (with timeout)
+    let latestVersion = null;
+    let updateAvailable = false;
+    
+    try {
+      const https = require('https');
+      const options = {
+        hostname: 'api.github.com',
+        path: '/repos/TheLastDruid/mediaIngest/releases/latest',
+        method: 'GET',
+        headers: {
+          'User-Agent': 'MediaIngest-Dashboard',
+          'Accept': 'application/vnd.github.v3+json'
+        },
+        timeout: 5000
+      };
+      
+      const githubData = await new Promise((resolve, reject) => {
+        const req = https.request(options, (response) => {
+          let data = '';
+          response.on('data', chunk => data += chunk);
+          response.on('end', () => {
+            if (response.statusCode === 200) {
+              resolve(JSON.parse(data));
+            } else {
+              reject(new Error(`GitHub API returned ${response.statusCode}`));
+            }
+          });
+        });
+        
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+        req.end();
+      });
+      
+      latestVersion = {
+        version: githubData.tag_name.replace(/^v/, ''),
+        releaseDate: githubData.published_at.split('T')[0],
+        releaseNotes: githubData.body,
+        downloadUrl: githubData.html_url
+      };
+      
+      // Compare versions (simple semantic version comparison)
+      const currentVer = localVersion.version.split('.').map(Number);
+      const latestVer = latestVersion.version.split('.').map(Number);
+      
+      for (let i = 0; i < 3; i++) {
+        if ((latestVer[i] || 0) > (currentVer[i] || 0)) {
+          updateAvailable = true;
+          break;
+        } else if ((latestVer[i] || 0) < (currentVer[i] || 0)) {
+          break;
+        }
+      }
+    } catch (err) {
+      // Network error or timeout - silently fail
+      console.error('Version check failed:', err.message);
+    }
+    
+    res.json({
+      ok: true,
+      current: localVersion,
+      latest: latestVersion,
+      updateAvailable
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'Failed to check version' });
+  }
+});
+
 // API: Server-Sent Events for real-time updates
 app.get('/api/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');

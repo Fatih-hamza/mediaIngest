@@ -1,6 +1,43 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { HardDrive, Activity, CheckCircle, Film, Tv, Database, Zap, XCircle, Server, Power, Clapperboard } from 'lucide-react'
+import { HardDrive, Activity, CheckCircle, Film, Tv, Database, Zap, XCircle, Server, Power, Clapperboard, Download, X } from 'lucide-react'
+
+// Update Notification Banner
+function UpdateBanner({ version, onDismiss }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="bg-blue-600/20 border border-blue-500/50 rounded-xl p-4 mb-4 flex items-start justify-between"
+    >
+      <div className="flex items-start gap-3 flex-1">
+        <Download className="w-5 h-5 text-blue-400 mt-0.5 flex-shrink-0" />
+        <div>
+          <div className="font-semibold text-white mb-1">Update Available</div>
+          <div className="text-sm text-slate-300">
+            Version {version.latest.version} is now available. You're currently running {version.current.version}.
+          </div>
+          <a 
+            href={version.latest.downloadUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-block mt-2 text-blue-400 hover:text-blue-300 text-sm font-medium underline"
+          >
+            View Release Notes →
+          </a>
+        </div>
+      </div>
+      <button
+        onClick={onDismiss}
+        className="text-slate-400 hover:text-white transition-colors p-1"
+        title="Dismiss"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </motion.div>
+  )
+}
 
 function StatusBadge({ active }) {
   return (
@@ -446,6 +483,8 @@ export default function App() {
   const [stats, setStats] = useState({ totalFiles: 0, totalGB: '0.00', lastActive: null })
   const [storage, setStorage] = useState({ nas: null, usb: null })
   const [toast, setToast] = useState(null)
+  const [updateInfo, setUpdateInfo] = useState(null)
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false)
 
   const showToast = (message, isError = false) => {
     setToast({ message, isError })
@@ -459,15 +498,17 @@ export default function App() {
     // Initial data fetch
     async function fetchInitialData() {
       try {
-        const [historyRes, statsRes, storageRes] = await Promise.all([
+        const [historyRes, statsRes, storageRes, versionRes] = await Promise.all([
           fetch('/api/history'),
           fetch('/api/stats'),
-          fetch('/api/storage')
+          fetch('/api/storage'),
+          fetch('/api/version')
         ])
         
         const historyData = await historyRes.json()
         const statsData = await statsRes.json()
         const storageData = await storageRes.json()
+        const versionData = await versionRes.json()
         
         if (!mounted) return
         
@@ -481,6 +522,11 @@ export default function App() {
         
         if (storageData.ok) {
           setStorage(storageData.storage)
+        }
+        
+        if (versionData.ok && versionData.updateAvailable) {
+          setUpdateInfo(versionData)
+          setShowUpdateBanner(true)
         }
       } catch (e) {
         console.error('Initial fetch error:', e)
@@ -577,19 +623,35 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Header - Responsive */}
-        <header className="mb-4 sm:mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-center flex-shrink-0">
-              <HardDrive className="w-5 h-5 text-blue-400" />
+        {/* Header */}
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2.5 rounded-xl">
+                <HardDrive className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">Media Ingest</h1>
+                <p className="text-slate-400 text-sm">USB Auto-Sync Dashboard</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white">Media Ingest System</h1>
-              <p className="text-xs text-slate-600">Real-time monitoring & history</p>
-            </div>
+            <StatusBadge active={active} />
           </div>
-          <StatusBadge active={active} />
-        </header>
+        </motion.header>
+
+        {/* Update Banner */}
+        <AnimatePresence>
+          {showUpdateBanner && updateInfo && (
+            <UpdateBanner 
+              version={updateInfo} 
+              onDismiss={() => setShowUpdateBanner(false)} 
+            />
+          )}
+        </AnimatePresence>
 
         {/* Dynamic Layout Based on State */}
         <div className="flex flex-col gap-3 sm:gap-4 transition-all duration-500">

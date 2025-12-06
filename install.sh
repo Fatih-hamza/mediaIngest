@@ -3,16 +3,24 @@
 ################################################################################
 # Universal USB Media Ingest Installer for Proxmox VE
 # 
+# Version: 3.0.0
+# Release Date: 2025-12-06
+#
 # Features:
 # - Intelligent destination selection (scans /mnt/pve/* and /mnt/*)
 # - Interactive storage menu
 # - Auto-provisions Media folder with proper permissions
 # - Complete automation: Host + LXC creation + Dashboard
 # - Single destination choice, then fully automated
+# - Comprehensive security hardening (12/12 risks mitigated)
 ################################################################################
 
 set -e
 set -o pipefail
+
+# Version information
+INSTALLER_VERSION="3.0.0"
+INSTALLER_DATE="2025-12-06"
 
 ################################################################################
 # Color Definitions
@@ -815,6 +823,16 @@ EOF'
     pct exec $CTID -- systemctl start ingest-dashboard.service
     sleep 3
     msg_ok "Dashboard service started"
+    
+    msg_info "Creating version file"
+    pct exec $CTID -- bash -c "cat > /opt/dashboard/version.json << 'EOFVERSION'
+{
+  \"version\": \"${INSTALLER_VERSION}\",
+  \"releaseDate\": \"${INSTALLER_DATE}\",
+  \"updateCheckUrl\": \"https://api.github.com/repos/TheLastDruid/mediaIngest/releases/latest\"
+}
+EOFVERSION"
+    msg_ok "Version file created"
 }
 
 ################################################################################
