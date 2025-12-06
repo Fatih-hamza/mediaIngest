@@ -614,12 +614,12 @@ pvefw compile
 9. ✅ Configure log rotation (commit 23d25c5)
 10. ✅ Add locking mechanism for concurrent USBs (commit 46fe544)
 11. ⏳ Convert to unprivileged container (complex - requires UID/GID remapping)
-12. ✅ Implement file count and size limits (DoS protection - Risk #8) (commit TBD)
+12. ✅ Implement file count and size limits (DoS protection - Risk #8) (commit 51600f1)
 
 ### Phase 4: Hardening (Ongoing)
 13. ⏳ Run dashboard as non-root user (Risk #11)
-14. ✅ Reduce file permissions from 777 to 755 (Risk #11) (commit TBD)
-15. ✅ Generate random LXC password (Risk #12) (commit TBD)
+14. ✅ Reduce file permissions from 777 to 755 (Risk #11) (commit 51600f1)
+15. ✅ Generate random LXC password (Risk #12) (commit 51600f1)
 16. ⏳ Implement automated security scanning
 17. ⏳ Add monitoring and alerting
 
@@ -680,7 +680,7 @@ This tool is provided "as-is" without warranty. The security mitigations outline
 - `413972e`: Dashboard API Security (Risks #4, #5, #6)
 - `23d25c5`: Log Rotation and Permissions (Risk #9)
 - `46fe544`: Race Condition Protection (Risk #10)
-- `TBD`: Final Security Hardening (Risks #8, #11, #12)
+- `51600f1`: Final Security Hardening (Risks #8, #11, #12)
 
 **All documented security risks have been addressed!** 🎉
 
