@@ -48,8 +48,13 @@ const authMiddleware = basicAuth({
   realm: 'Media Ingest Dashboard'
 });
 
-// Apply auth to all routes
-app.use(authMiddleware);
+// Apply auth to all routes except version endpoint
+app.use((req, res, next) => {
+  if (req.path === '/api/version') {
+    return next(); // Skip auth for version check
+  }
+  authMiddleware(req, res, next);
+});
 
 // Security: Rate limiting - 100 requests per minute per IP
 const limiter = rateLimit({
