@@ -803,11 +803,19 @@ deploy_dashboard() {
     pct exec $CTID -- bash -c "cd /opt/dashboard && npm install --silent" >/dev/null 2>&1
     msg_ok "Backend dependencies installed"
     
+    msg_info "Installing security packages (authentication and rate limiting)"
+    pct exec $CTID -- bash -c "cd /opt/dashboard && npm install express-basic-auth express-rate-limit --silent" >/dev/null 2>&1
+    msg_ok "Security packages installed"
+    
     msg_info "Building frontend"
     pct exec $CTID -- bash -c "cd /opt/dashboard/client && npm install --silent && npm run build" >/dev/null 2>&1
     msg_ok "Frontend built"
     
     msg_info "Creating systemd service"
+    
+    # Generate secure random password for dashboard
+    DASHBOARD_PASSWORD=$(openssl rand -base64 24)
+    
     pct exec $CTID -- bash -c 'cat > /etc/systemd/system/ingest-dashboard.service << '\''EOF'\''
 [Unit]
 Description=Media Ingest Dashboard
@@ -821,6 +829,7 @@ ExecStart=/usr/bin/node /opt/dashboard/server.js
 Restart=always
 RestartSec=10
 Environment="NODE_ENV=production"
+Environment="DASHBOARD_PASSWORD='"$DASHBOARD_PASSWORD"'"
 
 [Install]
 WantedBy=multi-user.target
@@ -862,7 +871,10 @@ show_summary() {
     echo -e "  SSH: ${YW}ssh root@$CT_IP${CL}"
     
     echo -e "\n${BL}Dashboard Access:${CL}"
-    echo -e "  ${GN}http://$CT_IP:3000${CL}"
+    echo -e "  URL: ${GN}http://$CT_IP:3000${CL}"
+    echo -e "  Username: ${GN}admin${CL}"
+    echo -e "  Password: ${GN}${DASHBOARD_PASSWORD}${CL}"
+    echo -e "  ${YW}⚠ Save these credentials - they cannot be recovered!${CL}"
     
     echo -e "\n${BL}Mount Points:${CL}"
     echo -e "  USB: ${GN}/media/usb-ingest${CL}"

@@ -187,7 +187,8 @@ EOF
 
 ### 4. Remote Code Execution via Dashboard API
 
-**Risk Level**: High (CVSS 7.5)
+**Risk Level**: High (CVSS 7.5)  
+**Status**: ✅ **IMPLEMENTED** (HTTP Basic Auth, rate limiting, log sanitization, CORS restrictions)
 
 **Description**: The Express.js dashboard exposes API endpoints without authentication. An attacker on the local network could exploit these endpoints to inject malicious data or trigger unintended operations.
 
@@ -255,7 +256,7 @@ app.use(cors({
 EOFJS
 ```
 
-**Status**: ⏳ Pending Implementation
+**Status**: ✅ **IMPLEMENTED** (Random password generation, HTTP Basic Auth, rate limiting, log sanitization, local network CORS)
 
 ---
 
@@ -263,7 +264,8 @@ EOFJS
 
 ### 5. Unauthenticated Dashboard Access
 
-**Risk Level**: Medium (CVSS 6.5)
+**Risk Level**: Medium (CVSS 6.5)  
+**Status**: ✅ **IMPLEMENTED** (Covered by Risk #4 - HTTP Basic Authentication enforced)
 
 **Description**: Anyone on the local network can access the dashboard at `http://[IP]:3000` without credentials, exposing transfer history, NAS capacity, and real-time sync progress.
 

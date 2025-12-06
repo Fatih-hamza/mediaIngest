@@ -3,6 +3,8 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const basicAuth = require('express-basic-auth');
+const rateLimit = require('express-rate-limit');
 
 const LOG_PATH = '/var/log/media-ingest.log';
 const PROGRESS_LOG_PATH = '/var/log/media-ingest.log'; // Use main log since progress log isn't being populated
@@ -10,8 +12,76 @@ const HISTORY_PATH = path.join(__dirname, 'history.json');
 const PORT = process.env.PORT || 3000;
 
 const app = express();
-app.use(cors());
+
+// Security: CORS - Allow only local network access
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow localhost and local network (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+    const localPatterns = [
+      /^http:\/\/localhost(:\d+)?$/,
+      /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+      /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+      /^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+      /^http:\/\/172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$/
+    ];
+    
+    if (localPatterns.some(pattern => pattern.test(origin))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
+
+// Security: HTTP Basic Authentication
+const authMiddleware = basicAuth({
+  users: { 
+    'admin': process.env.DASHBOARD_PASSWORD || 'changeme123'
+  },
+  challenge: true,
+  realm: 'Media Ingest Dashboard'
+});
+
+// Apply auth to all routes
+app.use(authMiddleware);
+
+// Security: Rate limiting - 100 requests per minute per IP
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100,
+  message: { error: 'Too many requests from this IP, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', limiter);
+
+// Security: Sanitize log lines to prevent injection attacks
+function sanitizeLogLine(line) {
+  if (typeof line !== 'string') return '';
+  
+  return line
+    .replace(/[<>"'&]/g, '') // Remove HTML entities
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control characters (keep \n and \r)
+    .substring(0, 2000); // Limit length to prevent memory exhaustion
+}
+
+// Security: Validate log structure to prevent marker injection
+function validateLogLine(line) {
+  // Reject lines with multiple SYNC markers (possible injection)
+  const markerCount = (line.match(/SYNC_(START|END)/g) || []).length;
+  if (markerCount > 1) {
+    console.warn('Possible log injection detected:', line.substring(0, 100));
+    return null;
+  }
+  return sanitizeLogLine(line);
+}
 
 // Initialize history file if it doesn't exist
 function initHistory() {
@@ -160,7 +230,10 @@ function parseCurrentTransfer() {
   }
   
   const progressContent = fs.readFileSync(PROGRESS_LOG_PATH, 'utf8');
-  const allLines = progressContent.split('\n').filter(line => line.trim());
+  const allLines = progressContent.split('\n')
+    .filter(line => line.trim())
+    .map(line => validateLogLine(line))
+    .filter(line => line !== null);
   
   // Look at last 200 lines to ensure we catch SYNC_START marker
   const progressLines = allLines.slice(-200);
@@ -363,7 +436,10 @@ function watchLogFile() {
         });
         
         stream.on('end', () => {
-          const newLines = buffer.split(/\r?\n/).filter(line => line.trim());
+          const newLines = buffer.split(/\r?\n/)
+            .filter(line => line.trim())
+            .map(line => validateLogLine(line))
+            .filter(line => line !== null);
           const completed = parseNewCompletedTransfers(newLines);
           
           if (completed.length > 0) {
