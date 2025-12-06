@@ -19,7 +19,7 @@ set -e
 set -o pipefail
 
 # Version information
-INSTALLER_VERSION="3.0.5"
+INSTALLER_VERSION="3.1.0"
 INSTALLER_DATE="2025-12-06"
 
 ################################################################################
@@ -590,9 +590,69 @@ set -euo pipefail
 LOG="/var/log/ingest-media.log"
 INGEST_STATUS="/run/ingest/status.json"
 NETWORK_DIR="/media/nas"
+TMDB_CONFIG="/opt/dashboard/tmdb-config.json"
 
 # ===================================================================
 # Functions
+# ===================================================================
+
+# Load TMDB configuration
+load_tmdb_config() {
+    if [ -f "$TMDB_CONFIG" ]; then
+        TMDB_ENABLED=$(grep -o '"enabled":\s*true' "$TMDB_CONFIG" 2>/dev/null)
+        TMDB_API_KEY=$(grep -o '"apiKey":\s*"[^"]*"' "$TMDB_CONFIG" 2>/dev/null | cut -d'"' -f4)
+        [ -n "$TMDB_ENABLED" ] && [ -n "$TMDB_API_KEY" ] && return 0
+    fi
+    return 1
+}
+
+# Query TMDB for movie information
+query_tmdb_movie() {
+    local search_term="$1"
+    local year=""
+    
+    # Check if TMDB is enabled
+    load_tmdb_config || return 1
+    
+    # Extract year if present in format "Movie Name (2024)"
+    if [[ "$search_term" =~ \(([0-9]{4})\) ]]; then
+        year="${BASH_REMATCH[1]}"
+        search_term="${search_term%% \(*}"
+    fi
+    
+    # Clean up search term (remove quality tags, etc)
+    search_term=$(echo "$search_term" | sed -E 's/\[.*\]//g' | sed -E 's/\(.*p\)//g' | xargs)
+    
+    local url="https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=$(echo "$search_term" | sed 's/ /%20/g')"
+    if [ -n "$year" ]; then
+        url="${url}&year=${year}"
+    fi
+    
+    local response=$(curl -s "$url" 2>/dev/null)
+    
+    # Extract first result
+    local tmdb_title=$(echo "$response" | grep -o '"title":"[^"]*"' | head -1 | cut -d'"' -f4)
+    local tmdb_year=$(echo "$response" | grep -o '"release_date":"[0-9-]*"' | head -1 | cut -d'"' -f4 | cut -d'-' -f1)
+    local tmdb_id=$(echo "$response" | grep -o '"id":[0-9]*' | head -1 | cut -d':' -f2)
+    
+    if [ -n "$tmdb_title" ] && [ -n "$tmdb_year" ]; then
+        echo "${tmdb_title} (${tmdb_year})|${tmdb_id}"
+    else
+        echo ""
+    fi
+}
+
+# Check if movie already exists on NAS
+check_duplicate() {
+    local movie_name="$1"
+    local dest_dir="$2"
+    
+    # Search for similar movie files
+    if find "$dest_dir" -type f -name "*.mp4" -o -name "*.mkv" -o -name "*.avi" | grep -qi "$(echo "$movie_name" | sed 's/ .*//')"; then
+        return 0  # Duplicate found
+    fi
+    return 1  # Not a duplicate
+}
 # ===================================================================
 
 log() {
@@ -644,6 +704,63 @@ sync_folder() {
     
     log "Syncing $FOLDER..."
     
+    # For Movies, check each movie folder for TMDB info and duplicates
+    if [ "$FOLDER" = "Movies" ]; then
+        for movie_dir in "$SOURCE"/*; do
+            [ -d "$movie_dir" ] || continue
+            
+            local movie_name=$(basename "$movie_dir")
+            log "Processing: $movie_name"
+            
+            # Query TMDB
+            local tmdb_result=$(query_tmdb_movie "$movie_name")
+            if [ -n "$tmdb_result" ]; then
+                local proper_name=$(echo "$tmdb_result" | cut -d'|' -f1)
+                local tmdb_id=$(echo "$tmdb_result" | cut -d'|' -f2)
+                log "TMDB Match: $proper_name (ID: $tmdb_id)"
+                
+                # Check for duplicates
+                if check_duplicate "$proper_name" "$DEST"; then
+                    log "DUPLICATE: '$proper_name' already exists on NAS. Skipping."
+                    continue
+                fi
+                
+                # Use proper TMDB name for destination
+                local dest_folder="$DEST/$proper_name"
+            else
+                log "TMDB: No match found, using original name"
+                local dest_folder="$DEST/$movie_name"
+            fi
+            
+            # Create destination directory
+            mkdir -p "$dest_folder"
+            
+            # Sync movie files
+            rsync -av --progress \
+                --no-perms --no-owner --no-group \
+                --exclude='.DS_Store' \
+                --exclude='Thumbs.db' \
+                --exclude='*.txt' \
+                --exclude='*.nfo' \
+                --exclude='*.jpg' \
+                --exclude='*.png' \
+                "$movie_dir/" "$dest_folder/" 2>&1 | \
+                tr '\r' '\n' | \
+                grep -oP '\d+%' | \
+                tail -1 | \
+                while read -r percent; do
+                    progress=${percent%\%}
+                    create_status "syncing" "Syncing: $movie_name" "$progress" "$DEVICE_NAME"
+                done
+            
+            log "Completed: $movie_name"
+        done
+        
+        log "$FOLDER sync complete"
+        return 0
+    fi
+    
+    # For Series/Anime, use original rsync logic
     # Security: Use --no-perms --no-owner --no-group for untrusted sources
     # Filter .DS_Store and Thumbs.db
     rsync -av --progress \

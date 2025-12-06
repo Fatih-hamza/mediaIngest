@@ -282,6 +282,140 @@ function DeviceCard({ onAction, deviceName }) {
   )
 }
 
+function SettingsCard({ onAction }) {
+  const [tmdbEnabled, setTmdbEnabled] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    // Load TMDB config
+    fetch('/api/tmdb/config', {
+      headers: { 'Authorization': 'Basic ' + btoa('admin:' + localStorage.getItem('password')) }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          setTmdbEnabled(data.enabled);
+          setHasApiKey(data.hasApiKey);
+        }
+      })
+      .catch(err => console.error('Failed to load TMDB config:', err));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/tmdb/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Basic ' + btoa('admin:' + localStorage.getItem('password'))
+        },
+        body: JSON.stringify({
+          enabled: tmdbEnabled,
+          apiKey: apiKey || undefined
+        })
+      });
+      
+      const data = await res.json();
+      if (data.ok) {
+        setHasApiKey(data.hasApiKey);
+        setApiKey('');
+        setShowApiKey(false);
+        onAction({ type: 'success', message: 'TMDB settings saved successfully' });
+      } else {
+        onAction({ type: 'error', message: 'Failed to save settings' });
+      }
+    } catch (error) {
+      onAction({ type: 'error', message: 'Error saving settings' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="bg-slate-900/50 backdrop-blur-sm rounded-xl p-6 border border-slate-800/50">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-2 bg-violet-500/10 rounded-lg">
+          <svg className="w-5 h-5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-semibold text-white">Settings</h3>
+      </div>
+
+      <div className="space-y-4">
+        {/* TMDB Integration */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="text-sm font-medium text-white">TMDB Integration</h4>
+              <p className="text-xs text-slate-400 mt-1">
+                Enable movie metadata lookup and duplicate detection
+              </p>
+            </div>
+            <button
+              onClick={() => setTmdbEnabled(!tmdbEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                tmdbEnabled ? 'bg-emerald-500' : 'bg-slate-700'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                tmdbEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          {tmdbEnabled && (
+            <div className="mt-3 space-y-2 pt-3 border-t border-slate-800">
+              <label className="block text-sm text-slate-300">
+                TMDB API Key
+                {!hasApiKey && <span className="text-red-400 ml-1">*</span>}
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={hasApiKey ? '••••••••••••••••' : 'Enter your TMDB API key'}
+                    className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    {showApiKey ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">
+                Get your free API key at{' '}
+                <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">
+                  themoviedb.org/settings/api
+                </a>
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Save Button */}
+        <button
+          onClick={handleSave}
+          disabled={saving || (tmdbEnabled && !hasApiKey && !apiKey)}
+          className="w-full px-4 py-2 bg-violet-500 hover:bg-violet-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-medium transition-colors"
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function StatsCard({ stats }) {
   const lastActiveText = stats.lastActive 
     ? new Date(stats.lastActive).toLocaleString()
@@ -716,6 +850,7 @@ export default function App() {
             <StatsCard stats={stats} />
             <StorageCard storage={storage} />
             <DeviceCard onAction={showToast} deviceName={deviceName} />
+            <SettingsCard onAction={showToast} />
           </div>
 
           {/* History - Expands to fill space when idle */}

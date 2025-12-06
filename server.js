@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const LOG_PATH = '/var/log/media-ingest.log';
 const PROGRESS_LOG_PATH = '/var/log/media-ingest.log'; // Use main log since progress log isn't being populated
 const HISTORY_PATH = path.join(__dirname, 'history.json');
+const TMDB_CONFIG_PATH = path.join(__dirname, 'tmdb-config.json');
 const PORT = process.env.PORT || 3000;
 
 const app = express();
@@ -772,6 +773,45 @@ app.post('/api/scan', (req, res) => {
     res.json({ ok: true, message: 'Library scan initiated' });
   });
   */
+});
+
+// TMDB Configuration endpoints
+app.get('/api/tmdb/config', authMiddleware, (req, res) => {
+  try {
+    if (fs.existsSync(TMDB_CONFIG_PATH)) {
+      const config = JSON.parse(fs.readFileSync(TMDB_CONFIG_PATH, 'utf8'));
+      // Don't send the API key to the client, only the enabled status
+      res.json({ ok: true, enabled: config.enabled || false, hasApiKey: !!config.apiKey });
+    } else {
+      res.json({ ok: true, enabled: false, hasApiKey: false });
+    }
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/tmdb/config', authMiddleware, (req, res) => {
+  try {
+    const { enabled, apiKey } = req.body;
+    
+    let config = { enabled: false, apiKey: '' };
+    if (fs.existsSync(TMDB_CONFIG_PATH)) {
+      config = JSON.parse(fs.readFileSync(TMDB_CONFIG_PATH, 'utf8'));
+    }
+    
+    if (typeof enabled === 'boolean') {
+      config.enabled = enabled;
+    }
+    
+    if (apiKey && apiKey.trim()) {
+      config.apiKey = apiKey.trim();
+    }
+    
+    fs.writeFileSync(TMDB_CONFIG_PATH, JSON.stringify(config, null, 2));
+    res.json({ ok: true, enabled: config.enabled, hasApiKey: !!config.apiKey });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
 // Serve static files from client/dist
