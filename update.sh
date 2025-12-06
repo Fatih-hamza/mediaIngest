@@ -31,10 +31,47 @@ echo -e "${BL}━━━━━━━━━━━━━━━━━━━━━━
 echo ""
 
 # Check if running inside container or on Proxmox host
-if [ -f "/.dockerenv" ] || grep -q "lxc" /proc/1/cgroup 2>/dev/null; then
-    # Running inside container
-    msg_info "Detected container environment"
-    msg_ok "Running update inside container"
+# Check for pct command to determine if we're on Proxmox host
+if command -v pct >/dev/null 2>&1; then
+    # Running on Proxmox host - need to execute inside container
+    msg_info "Detected Proxmox host environment"
+    msg_ok "Will update container"
+    
+    # Find the media-ingest container
+    CTID=$(pct list | grep -i "media-ingest" | awk '{print $1}')
+    
+    if [ -z "$CTID" ]; then
+        msg_error "Could not find media-ingest container"
+        echo "Available containers:"
+        pct list
+        exit 1
+    fi
+    
+    msg_info "Found container ID: $CTID"
+    msg_ok "Container identified"
+    
+    # Download update script to container and execute it
+    msg_info "Downloading update script to container"
+    wget -qO /tmp/update-container.sh https://raw.githubusercontent.com/TheLastDruid/mediaIngest/main/update.sh
+    pct push "$CTID" /tmp/update-container.sh /tmp/update.sh
+    msg_ok "Update script pushed to container"
+    
+    msg_info "Executing update inside container $CTID"
+    echo ""
+    pct exec "$CTID" -- bash /tmp/update.sh
+    
+    # Cleanup
+    rm -f /tmp/update-container.sh
+    pct exec "$CTID" -- rm -f /tmp/update.sh
+    
+    echo ""
+    echo -e "${BL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CL}"
+    exit 0
+fi
+
+# If we get here, we're inside the container
+msg_info "Detected container environment"
+msg_ok "Running update inside container"
     
     DASHBOARD_DIR="/opt/dashboard"
     BACKUP_DIR="/opt/dashboard.backup.$(date +%Y%m%d_%H%M%S)"
@@ -101,39 +138,6 @@ if [ -f "/.dockerenv" ] || grep -q "lxc" /proc/1/cgroup 2>/dev/null; then
         systemctl restart ingest-dashboard
         exit 1
     fi
-    
-else
-    # Running on Proxmox host - need to execute inside container
-    msg_info "Detected Proxmox host environment"
-    msg_ok "Will update container"
-    
-    # Find the media-ingest container
-    CTID=$(pct list | grep -i "media-ingest" | awk '{print $1}')
-    
-    if [ -z "$CTID" ]; then
-        msg_error "Could not find media-ingest container"
-        echo "Available containers:"
-        pct list
-        exit 1
-    fi
-    
-    msg_info "Found container ID: $CTID"
-    msg_ok "Container identified"
-    
-    # Download update script to container and execute it
-    msg_info "Downloading update script to container"
-    wget -qO /tmp/update-container.sh https://raw.githubusercontent.com/TheLastDruid/mediaIngest/main/update.sh
-    pct push "$CTID" /tmp/update-container.sh /tmp/update.sh
-    msg_ok "Update script pushed to container"
-    
-    msg_info "Executing update inside container $CTID"
-    echo ""
-    pct exec "$CTID" -- bash /tmp/update.sh
-    
-    # Cleanup
-    rm -f /tmp/update-container.sh
-    pct exec "$CTID" -- rm -f /tmp/update.sh
-fi
 
 echo ""
 echo -e "${BL}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CL}"
