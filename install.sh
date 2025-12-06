@@ -570,7 +570,7 @@ EOF'
     if [ -f "$(dirname "$0")/scripts/ingest-media.sh" ]; then
         pct push $CTID "$(dirname "$0")/scripts/ingest-media.sh" /usr/local/bin/ingest-media.sh
     else
-        pct exec $CTID -- bash -c 'cat > /usr/local/bin/ingest-media.sh << '\''EOFSCRIPT'\''
+        pct exec $CTID -- bash -c "cat << 'EOFSCRIPT' > /usr/local/bin/ingest-media.sh
 #!/bin/bash
 
 SEARCH_ROOT="/media/usb-ingest"
@@ -720,9 +720,9 @@ sync_folder() {
         # DoS Protection: --timeout=7200 (2 hours) prevents indefinite hangs
         stdbuf -oL rsync -rvh -W --inplace --progress --ignore-existing \
             --safe-links --no-specials --no-devices --timeout=7200 \
-            "$SRC_SUB/" "$DST_PATH/" 2>&1 | \
-            stdbuf -oL tr '"'"'\\r'"'"' '"'"'\\n'"'"' | \
-            stdbuf -oL grep -v '"'"'^$'"'"' >> "$LOG"
+            "\$SRC_SUB/" "\$DST_PATH/" 2>&1 | \
+            stdbuf -oL tr '\r' '\n' | \
+            stdbuf -oL grep -v '^$' >> "\$LOG"
 
         echo "SYNC_END:$FOLDER_NAME" >> "$LOG"
     else
@@ -734,8 +734,8 @@ sync_folder "Movies"
 sync_folder "Series"
 sync_folder "Anime"
 
-echo "$(date): Ingest Complete." >> "$LOG"
-EOFSCRIPT'
+echo "\$(date): Ingest Complete." >> "\$LOG"
+EOFSCRIPT"
     fi
     
     pct exec $CTID -- chmod +x /usr/local/bin/ingest-media.sh
