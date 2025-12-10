@@ -822,7 +822,7 @@ sync_folder() {
             mkdir -p "$dest_folder"
             
             # Sync movie files
-            rsync -av --progress \
+            stdbuf -oL rsync -av --progress \
                 --no-perms --no-owner --no-group \
                 --exclude='.DS_Store' \
                 --exclude='Thumbs.db' \
@@ -872,7 +872,7 @@ sync_folder() {
             mkdir -p "$dest_folder"
             
             # Sync anime files
-            rsync -av --progress \
+            stdbuf -oL rsync -av --progress \
                 --no-perms --no-owner --no-group \
                 --exclude='.DS_Store' \
                 --exclude='Thumbs.db' \
@@ -899,7 +899,7 @@ sync_folder() {
     # For Series, use original rsync logic
     # Security: Use --no-perms --no-owner --no-group for untrusted sources
     # Filter .DS_Store and Thumbs.db
-    rsync -av --progress \
+    stdbuf -oL rsync -av --progress \
         --no-perms --no-owner --no-group \
         --exclude='.DS_Store' \
         --exclude='Thumbs.db' \

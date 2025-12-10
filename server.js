@@ -804,8 +804,27 @@ app.post('/api/eject', (req, res) => {
 
 // Scan Jellyfin library
 app.post('/api/scan', async (req, res) => {
-  const JELLYFIN_URL = process.env.JELLYFIN_URL;
-  const JELLYFIN_API_KEY = process.env.JELLYFIN_API_KEY;
+  let JELLYFIN_URL = null;
+  let JELLYFIN_API_KEY = null;
+  
+  // First check if config file exists and has settings
+  if (fs.existsSync(JELLYFIN_CONFIG_PATH)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(JELLYFIN_CONFIG_PATH, 'utf8'));
+      if (config.enabled && config.url && config.token) {
+        JELLYFIN_URL = config.url;
+        JELLYFIN_API_KEY = config.token;
+      }
+    } catch (error) {
+      console.error('Error reading Jellyfin config:', error);
+    }
+  }
+  
+  // Fallback to environment variables if config file settings not available
+  if (!JELLYFIN_URL || !JELLYFIN_API_KEY) {
+    JELLYFIN_URL = process.env.JELLYFIN_URL;
+    JELLYFIN_API_KEY = process.env.JELLYFIN_API_KEY;
+  }
   
   // If Jellyfin config is available, use the API directly
   if (JELLYFIN_URL && JELLYFIN_API_KEY) {

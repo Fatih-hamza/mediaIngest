@@ -1,8 +1,12 @@
 #!/bin/bash
 
+# Concurrency Lock: Prevent multiple instances from running simultaneously
+exec 200>/var/lock/usb-ingest.lock
+flock -n 200 || { echo "Another USB ingest operation is already running. Exiting."; exit 1; }
+
 DEVICE=$1
 HOST_MOUNT="/mnt/usb-pass"
-LXC_ID="105"
+LXC_ID="__LXC_ID__"
 
 # Safety Check
 if [ -z "$DEVICE" ]; then 
@@ -49,8 +53,7 @@ echo "Mounted successfully. Triggering LXC Ingest..."
 pct exec $LXC_ID -- /usr/local/bin/ingest-media.sh
 
 # 3. Cleanup
-echo "Ingest finished. Cleaning up..."
+echo "Ingest finished. Syncing data..."
 sync
-umount "$HOST_MOUNT"
 
-echo "Complete. Drive unmounted."
+echo "Complete. Drive remains mounted for dashboard storage stats."
