@@ -890,7 +890,7 @@ app.post('/api/scan', async (req, res) => {
 });
 
 // TMDB Configuration endpoints
-app.get('/api/tmdb/config', authMiddleware, (req, res) => {
+app.get('/api/tmdb/config', (req, res) => {
   try {
     if (fs.existsSync(TMDB_CONFIG_PATH)) {
       const config = JSON.parse(fs.readFileSync(TMDB_CONFIG_PATH, 'utf8'));
@@ -904,7 +904,7 @@ app.get('/api/tmdb/config', authMiddleware, (req, res) => {
   }
 });
 
-app.post('/api/tmdb/config', authMiddleware, (req, res) => {
+app.post('/api/tmdb/config', (req, res) => {
   try {
     const { enabled, apiKey } = req.body;
     
@@ -929,7 +929,7 @@ app.post('/api/tmdb/config', authMiddleware, (req, res) => {
 });
 
 // AniList Configuration Endpoints
-app.get('/api/anilist/config', authMiddleware, (req, res) => {
+app.get('/api/anilist/config', (req, res) => {
   try {
     let config = { enabled: false, apiKey: '' };
     if (fs.existsSync(ANILIST_CONFIG_PATH)) {
@@ -942,7 +942,7 @@ app.get('/api/anilist/config', authMiddleware, (req, res) => {
   }
 });
 
-app.post('/api/anilist/config', authMiddleware, (req, res) => {
+app.post('/api/anilist/config', (req, res) => {
   try {
     const { enabled, apiKey } = req.body;
     let config = { enabled: false, apiKey: '' };
@@ -959,7 +959,7 @@ app.post('/api/anilist/config', authMiddleware, (req, res) => {
 });
 
 // Jellyfin Configuration Endpoints
-app.get('/api/jellyfin/config', authMiddleware, (req, res) => {
+app.get('/api/jellyfin/config', (req, res) => {
   try {
     let config = { enabled: false, url: '', token: '' };
     if (fs.existsSync(JELLYFIN_CONFIG_PATH)) {
@@ -976,7 +976,7 @@ app.get('/api/jellyfin/config', authMiddleware, (req, res) => {
   }
 });
 
-app.post('/api/jellyfin/config', authMiddleware, (req, res) => {
+app.post('/api/jellyfin/config', (req, res) => {
   try {
     const { enabled, url, token } = req.body;
     let config = { enabled: false, url: '', token: '' };
